@@ -143,6 +143,19 @@ node live2d-pipeline/tools/verify.mjs   # 23 项断言
 - **默认角色仍是网格形变**：真 `.moc3` 已经产出并校验，但插件还没有接 Cubism 渲染后端（需要 Cubism Core + `pixi-live2d-display`）；目前两套并存，切换是下一步。
 - **模型只在 neutral pose 下验证过像素级正确**：眨眼看/口型/物理在真实渲染器里的表现尚未目视确认——本机没有能跑起来的 Cubism 预览环境。
 
+## 同步到 GitHub
+
+本仓库对应 **https://github.com/br0ny4/dsh-live2d-pet**，更改随做随同步：
+
+```bash
+./scripts/sync.sh "fix: 修掉抠图的通道步长 bug"
+```
+
+两点须知：
+
+- 仓库自己的 `.git/config` 里把 `http.proxy` 置空了。这台机器的**全局** git 配置指向 `127.0.0.1:7890`，而那个代理并不总在运行——不覆盖的话 `git push` 会直接连不上。全局配置没有被改动。
+- `scripts/fetch-live2d-assets.mjs` 抓下来的 Cubism Core 与官方样例模型按 Live2D 的许可**不入库**；`live2d-pipeline/build`（420 MB 的 Gradle 发行版）与中间图层同样不入库。仓库里的 `resources/live2d/models/whale-maid/` 是本项目自己产出的模型。
+
 ## 许可
 
 MIT。角色立绘来自使用者提供的原画，请自行确认其可用性。
