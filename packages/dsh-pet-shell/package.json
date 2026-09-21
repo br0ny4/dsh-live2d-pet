@@ -1,0 +1,20 @@
+{
+  "name": "dsh-pet-shell",
+  "version": "0.1.0",
+  "private": true,
+  "description": "全局桌面宠物外壳：把 dsh-live2d-pet 的角色放到系统桌面上（透明、置顶、鼠标穿透），并绑定 harness 状态。",
+  "license": "MIT",
+  "type": "module",
+  "main": "src/main/index.js",
+  "scripts": {
+    "build": "node build.mjs",
+    "prestart": "node build.mjs",
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "screenshot": "node build.mjs && electron . --dev --attach-only --screenshot"
+  },
+  "devDependencies": {
+    "electron": "^44.4.3",
+    "esbuild": "^0.25.12"
+  }
+}

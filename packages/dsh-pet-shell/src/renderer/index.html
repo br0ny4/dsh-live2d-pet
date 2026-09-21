@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <!-- Locked down, but note `style-src 'self'`: an inline-only policy would
+         also block this window's own stylesheet. -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'" />
+    <title>DSH 桌宠</title>
+    <link rel="stylesheet" href="pet.css" />
+  </head>
+  <body>
+    <div id="stage">
+      <div id="panel" hidden>
+        <div class="head">
+          <span id="dot" class="dot"></span>
+          <span id="phase">正在连接…</span>
+          <select id="session"></select>
+        </div>
+        <div id="say" class="say" hidden></div>
+        <textarea id="text" placeholder="给这个会话下达指令…（⌘/Ctrl + Enter 发送）"></textarea>
+        <div class="quick" id="quick"></div>
+        <div class="row">
+          <button id="send" class="btn">发送指令</button>
+          <button id="mode" class="btn ghost">模式：排队</button>
+          <button id="open" class="btn ghost">打开界面</button>
+        </div>
+        <div id="note" class="note" hidden></div>
+      </div>
+
+      <div id="pet">
+        <canvas id="character"></canvas>
+        <span id="badge" class="badge"></span>
+        <span id="hint" class="hint">点击下达指令 · 拖动可移动</span>
+      </div>
+    </div>
+    <script src="bundle.js"></script>
+  </body>
+</html>

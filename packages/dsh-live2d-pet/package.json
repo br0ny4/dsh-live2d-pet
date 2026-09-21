@@ -1,0 +1,49 @@
+{
+  "name": "dsh-live2d-pet",
+  "version": "0.1.0",
+  "description": "Live2D 桌宠插件 for DeepSeek Harness — 浮在界面上的角色，点击即可向会话下达指令并跟随 agent 状态做出反应。",
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "live2d",
+    "desktop-pet",
+    "cordis",
+    "web-ui"
+  ],
+  "license": "MIT",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": {
+      "default": "./lib/index.js"
+    },
+    "./client": {
+      "default": "./lib/client.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "node build.mjs",
+    "prepare": "node build.mjs"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-api-session-controller"
+      ],
+      "platform": "web"
+    }
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.12"
+  }
+}

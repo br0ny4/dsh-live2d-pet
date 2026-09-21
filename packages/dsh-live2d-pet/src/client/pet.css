@@ -1,0 +1,191 @@
+/* Namespaced so the plugin never collides with product styles. Everything the
+   overlay root needs is set here; the pet itself is a canvas. */
+
+.dshl2d-root {
+  position: fixed;
+  z-index: 2147483000;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-select: none;
+  font-family: ui-sans-serif, system-ui, -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+}
+
+.dshl2d-pet {
+  pointer-events: auto;
+  position: relative;
+  /* The canvas is sized to 100% of this box, so the box must carry the size. */
+  width: 124px;
+  cursor: grab;
+  touch-action: none;
+  line-height: 0;
+}
+.dshl2d-pet:active { cursor: grabbing; }
+.dshl2d-pet canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  filter: drop-shadow(0 12px 20px rgba(10, 24, 60, 0.34));
+  pointer-events: none;
+}
+
+.dshl2d-badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #8b93a7;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.9), 0 1px 6px rgba(0, 0, 0, 0.3);
+}
+.dshl2d-badge.is-running { background: #2f7bff; animation: dshl2d-pulse 1.15s ease-in-out infinite; }
+.dshl2d-badge.is-done { background: #22b573; }
+.dshl2d-badge.is-error { background: #e5484d; }
+@keyframes dshl2d-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.78); }
+}
+
+.dshl2d-hint {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  transform: translateX(-50%);
+  font-size: 10px;
+  letter-spacing: 0.4px;
+  color: #fff;
+  background: rgba(18, 32, 68, 0.66);
+  padding: 2px 8px;
+  border-radius: 99px;
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 0.22s;
+  pointer-events: none;
+  line-height: 1.6;
+}
+.dshl2d-pet:hover .dshl2d-hint { opacity: 1; }
+
+.dshl2d-panel {
+  pointer-events: auto;
+  position: absolute;
+  bottom: calc(100% + 10px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: 292px;
+  box-sizing: border-box;
+  background: var(--dsw-specific-menu, #fff);
+  color: var(--dsw-alias-label-primary, #111827);
+  border: 1px solid var(--dsw-alias-border-l1, rgba(120, 140, 190, 0.34));
+  border-radius: 14px;
+  box-shadow: 0 18px 44px rgba(8, 20, 48, 0.3);
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  line-height: 1.5;
+}
+
+.dshl2d-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--dsw-alias-label-tertiary, #6b7280);
+}
+.dshl2d-dot { width: 7px; height: 7px; border-radius: 50%; background: #8b93a7; flex: 0 0 auto; }
+.dshl2d-dot.is-running { background: #2f7bff; }
+.dshl2d-dot.is-done { background: #22b573; }
+.dshl2d-dot.is-error { background: #e5484d; }
+
+.dshl2d-sel {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 11px;
+  font-family: inherit;
+  border: 1px solid var(--dsw-alias-border-l1, rgba(120, 140, 190, 0.36));
+  border-radius: 7px;
+  padding: 2px 4px;
+  background: transparent;
+  color: inherit;
+}
+
+.dshl2d-ta {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 58px;
+  resize: vertical;
+  font: 12px/1.55 inherit;
+  font-family: inherit;
+  padding: 7px 8px;
+  border-radius: 9px;
+  border: 1px solid var(--dsw-alias-border-l1, rgba(120, 140, 190, 0.4));
+  background: var(--dsw-alias-fill-l2, rgba(127, 140, 180, 0.07));
+  color: inherit;
+  outline: none;
+}
+.dshl2d-ta:focus { border-color: #2f7bff; }
+
+.dshl2d-row { display: flex; gap: 6px; align-items: center; }
+
+.dshl2d-btn {
+  flex: 1 1 auto;
+  font-size: 12px;
+  font-family: inherit;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: #2f7bff;
+  color: #fff;
+  cursor: pointer;
+  font-weight: 600;
+}
+.dshl2d-btn:disabled { opacity: 0.5; cursor: default; }
+.dshl2d-btn.ghost {
+  flex: 0 0 auto;
+  background: transparent;
+  color: inherit;
+  border-color: var(--dsw-alias-border-l1, rgba(120, 140, 190, 0.4));
+  font-weight: 500;
+}
+
+.dshl2d-msg {
+  font-size: 11px;
+  border-radius: 8px;
+  padding: 5px 7px;
+  background: var(--dsw-alias-fill-l2, rgba(127, 140, 180, 0.12));
+  word-break: break-word;
+}
+.dshl2d-msg.is-error { background: rgba(229, 72, 77, 0.13); color: #c62a2f; }
+.dshl2d-msg.is-ok { background: rgba(34, 181, 115, 0.14); color: #158a56; }
+.dshl2d-msg.is-info { background: rgba(47, 123, 255, 0.12); color: #1d5fd0; }
+
+.dshl2d-quick { display: flex; flex-wrap: wrap; gap: 5px; }
+.dshl2d-quick button {
+  font-size: 11px;
+  font-family: inherit;
+  padding: 3px 8px;
+  border-radius: 99px;
+  border: 1px solid var(--dsw-alias-border-l1, rgba(120, 140, 190, 0.4));
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.dshl2d-quick button:hover { border-color: #2f7bff; color: #2f7bff; }
+
+.dshl2d-say {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: 210px;
+  background: var(--dsw-specific-menu, #fff);
+  color: var(--dsw-alias-label-primary, #111827);
+  border: 1px solid var(--dsw-alias-border-l1, rgba(120, 140, 190, 0.34));
+  border-radius: 12px;
+  padding: 6px 9px;
+  font-size: 11px;
+  line-height: 1.5;
+  box-shadow: 0 10px 26px rgba(8, 20, 48, 0.24);
+  pointer-events: none;
+  word-break: break-word;
+}

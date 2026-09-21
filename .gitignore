@@ -1,0 +1,40 @@
+# 构建产物
+# 插件包的客户端 bundle 由 `pnpm build`（以及 npm 的 prepare 钩子）生成；
+# 外壳的渲染进程 bundle 由 prestart 生成。
+packages/dsh-live2d-pet/lib/client.js
+packages/dsh-pet-shell/src/renderer/bundle.js
+out/
+dist/
+
+# 依赖
+node_modules/
+
+# Fetch-script output: Live2D's Cubism Core and the official sample models are
+# proprietary material that may ship *inside* an application but must not be
+# redistributed as standalone files. Run `pnpm assets:live2d` to obtain them.
+resources/live2d/core/
+# Everything under models/ is downloaded sample material ... except our own
+# model, which the repo ships as the pipeline's reference output.
+resources/live2d/models/*
+!resources/live2d/models/whale-maid/
+!resources/live2d/models/manifest.json
+
+# Character pipeline intermediates (regenerate with `pnpm assets:character`)
+resources/character/*/debug-overlay.png
+resources/character/*/debug-mask.png
+resources/character/*/preview.png
+
+# psd2live 生产流水线：420 MB 的 Gradle 发行版与缓存、中间图层 PNG、调试输出
+live2d-pipeline/build/
+live2d-pipeline/out/
+live2d-pipeline/debug/
+
+# 探索期的一次性脚本；只保留可复现的那几个
+live2d-pipeline/tools/*
+!live2d-pipeline/tools/segment.mjs
+!live2d-pipeline/tools/build-psd.mjs
+!live2d-pipeline/tools/verify.mjs
+!live2d-pipeline/tools/pngcheck.mjs
+
+# macOS
+.DS_Store

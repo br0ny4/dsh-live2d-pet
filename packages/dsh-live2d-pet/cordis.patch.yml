@@ -1,0 +1,13 @@
+# Mounts this package's (empty) Host plugin into a profile.
+#
+# The pet is a browser-side feature: the Host half registers nothing, but the
+# row has to exist for the plugin to be composed, which is what makes the
+# browser half reachable through `package.json`'s `dsh.client` declaration and
+# `exports["./client"]`.
+#
+# Installing the package (`dsh plugin --profile <name> add dsh-live2d-pet`)
+# makes this patch the bundle layer for the row; the user's own
+# `cordis.patch.yml` can still override or disable it by the same id.
+- insert:
+    - id: live2d-pet
+      name: 'dsh-live2d-pet'

@@ -1,0 +1,27 @@
+{
+  "name": "dsh-live2d-pet-workspace",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Live2D 桌宠插件 for DeepSeek Harness — 角色资产流水线 + 可发布的插件包",
+  "license": "MIT",
+  "packageManager": "pnpm@10.30.2",
+  "type": "module",
+  "scripts": {
+    "build": "pnpm --filter dsh-live2d-pet build",
+    "assets:character": "node scripts/build-character.mjs",
+    "assets:character:debug": "node scripts/build-character.mjs --debug",
+    "assets:live2d": "node scripts/fetch-live2d-assets.mjs",
+    "assets:live2d:list": "node scripts/fetch-live2d-assets.mjs --list"
+  },
+  "devDependencies": {
+    "ag-psd": "^31.0.2",
+    "sharp": "^0.35.4",
+    "typescript": "^5.9.3"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "sharp"
+    ]
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "$comment": "Motion rig for the default chibi character. Coordinates are normalised to the sprite (0..1, y down) and were placed by rendering scripts/build-character.mjs --debug and checking the overlay against the artwork. `amp` is a fraction of the sprite's width (or height, for vertical motions).",
+  "sprite": "character.png",
+  "canvas": { "width": 240, "height": 423 },
+  "grid": { "cols": 10, "rows": 36 },
+  "influences": [
+    { "name": "ahoge", "cx": 0.42, "cy": 0.045, "rx": 0.13, "ry": 0.055, "motion": "sway", "amp": 0.018, "freq": 1.35, "phase": 0.2 },
+    { "name": "hair", "cx": 0.5, "cy": 0.4, "rx": 0.52, "ry": 0.3, "motion": "sway", "amp": 0.009, "freq": 0.55, "phase": 1.1 },
+    { "name": "flukeL", "cx": 0.055, "cy": 0.355, "rx": 0.115, "ry": 0.08, "motion": "flap", "amp": 0.012, "freq": 1.05, "phase": 0.4 },
+    { "name": "flukeR", "cx": 0.945, "cy": 0.355, "rx": 0.115, "ry": 0.08, "motion": "flap", "amp": 0.012, "freq": 1.05, "phase": 2.5 },
+    { "name": "skirt", "cx": 0.5, "cy": 0.79, "rx": 0.44, "ry": 0.145, "motion": "sway", "amp": 0.011, "freq": 0.72, "phase": 2.0 },
+    { "name": "body", "cx": 0.5, "cy": 0.62, "rx": 0.3, "ry": 0.24, "motion": "breathe", "amp": 0.008, "freq": 0.62, "phase": 0 },
+    { "name": "eyeL", "cx": 0.4, "cy": 0.345, "rx": 0.085, "ry": 0.042, "motion": "blink" },
+    { "name": "eyeR", "cx": 0.59, "cy": 0.345, "rx": 0.085, "ry": 0.042, "motion": "blink" },
+    { "name": "mouth", "cx": 0.475, "cy": 0.415, "rx": 0.06, "ry": 0.032, "motion": "talk" }
+  ]
+}
