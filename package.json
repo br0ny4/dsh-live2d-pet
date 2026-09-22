@@ -7,7 +7,12 @@
   "packageManager": "pnpm@10.30.2",
   "type": "module",
   "scripts": {
-    "build": "pnpm --filter dsh-live2d-pet build",
+    "build": "pnpm --filter dsh-live2d-pet build && pnpm --filter dsh-pet-shell build",
+    "test": "pnpm test:bridge && pnpm test:shell && pnpm test:model",
+    "test:bridge": "node packages/dsh-live2d-pet/test/bridge.test.mjs",
+    "test:shell": "node packages/dsh-pet-shell/test/smoke.mjs",
+    "test:model": "node live2d-pipeline/tools/verify.mjs",
+    "sync": "./scripts/sync.sh",
     "assets:character": "node scripts/build-character.mjs",
     "assets:character:debug": "node scripts/build-character.mjs --debug",
     "assets:live2d": "node scripts/fetch-live2d-assets.mjs",

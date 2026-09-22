@@ -143,6 +143,21 @@ node live2d-pipeline/tools/verify.mjs   # 23 项断言
 - **默认角色仍是网格形变**：真 `.moc3` 已经产出并校验，但插件还没有接 Cubism 渲染后端（需要 Cubism Core + `pixi-live2d-display`）；目前两套并存，切换是下一步。
 - **模型只在 neutral pose 下验证过像素级正确**：眨眼看/口型/物理在真实渲染器里的表现尚未目视确认——本机没有能跑起来的 Cubism 预览环境。
 
+## 测试
+
+```bash
+pnpm test              # 全部 66 项断言
+pnpm test:bridge       # Host 桥：发现文件/鉴权/SSE/状态派生/指令转发/卸载清理（34 项）
+pnpm test:shell        # 外壳端到端：起 mock 桥 → 真启 Electron → 校验接入日志与截图（9 项）
+pnpm test:model        # .moc3 模型结构校验（23 项）
+```
+
+`test:shell` 是真集成测试：它会拉起 `test/mock-bridge.mjs`（一个只实现三条路由的假 harness），再把**真的 Electron 外壳**跑起来接上去，最后校验它确实接入成功、渲染进程拿到了画布、截图尺寸与窗口几何一致。
+
+它唯一判断不了的是**角色好不好看**——那需要人眼看 PNG（`--keep-shot` 会保留截图路径）。它能挡的是整条接线：发现文件 → SSE → 渲染进程 → 画布。
+
+资产流水线是逐字节可复现的：重跑 `pnpm assets:character` 不会产生任何 diff。
+
 ## 同步到 GitHub
 
 本仓库对应 **https://github.com/br0ny4/dsh-live2d-pet**，更改随做随同步：

@@ -50,6 +50,15 @@ function log(message) {
   if (ARGS.includes('--dev')) console.log(`[shell] ${message}`)
 }
 
+/**
+ * Lifecycle events a background resident should report even without `--dev`:
+ * which harness it attached to, when it had to start one, and why it failed.
+ * Debug chatter stays behind {@link log}.
+ */
+function notice(message) {
+  console.log(`[shell] ${message}`)
+}
+
 // ---------------------------------------------------------------------------
 // Assets: the same rig and sprite the in-page plugin renders.
 // ---------------------------------------------------------------------------
@@ -168,7 +177,7 @@ async function connect() {
         attachedPid: discovery.pid,
         url: ownedHarness && ownedHarness.child && ownedHarness.child.pid === discovery.pid ? ownedHarness.url : null,
       })
-      log(`attached to bridge pid=${discovery.pid} port=${discovery.port}`)
+      notice(`attached to bridge pid=${discovery.pid} port=${discovery.port}`)
       return
     }
   }
@@ -186,6 +195,7 @@ async function connect() {
   }
 
   setStatus({ mode: 'starting', detail: '没有运行中的 harness，正在启动一个…' })
+  notice('no running harness found; starting one')
   const started = await startHarness({ dshPath: OPTIONS.dshPath, profile: OPTIONS.profile, log })
   if (!started.ok) {
     ownedHarness = null
