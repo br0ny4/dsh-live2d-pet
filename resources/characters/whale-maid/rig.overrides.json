@@ -1,0 +1,16 @@
+{
+  "$comment": "Hand corrections on top of the derived rig, checked against debug-overlay.png. The derivation is a starting point: it cannot know that this character's right flank is a whale tail rather than a wing, and its eye blobs grow to cover the brows. Names match the derived rig; `tail` and `skirt` are additions.",
+  "influences": [
+    { "name": "crest", "cx": 0.31, "cy": 0.045, "rx": 0.13, "ry": 0.05 },
+    { "name": "head", "cx": 0.5, "cy": 0.30, "rx": 0.49, "ry": 0.27 },
+    { "name": "wingL", "cx": 0.13, "cy": 0.55, "rx": 0.15, "ry": 0.20, "motion": "sway", "amp": 0.010, "freq": 0.5, "phase": 0.9 },
+    { "name": "wingR", "cx": 0.86, "cy": 0.53, "rx": 0.13, "ry": 0.19, "motion": "sway", "amp": 0.010, "freq": 0.5, "phase": 2.2 },
+    { "name": "tail", "cx": 0.79, "cy": 0.70, "rx": 0.19, "ry": 0.09, "motion": "sway", "amp": 0.020, "freq": 0.62, "phase": 1.4 },
+    { "name": "torso", "cx": 0.5, "cy": 0.69, "rx": 0.32, "ry": 0.15 },
+    { "name": "skirt", "cx": 0.5, "cy": 0.81, "rx": 0.36, "ry": 0.11, "motion": "sway", "amp": 0.012, "freq": 0.7, "phase": 2.6 },
+    { "name": "feet", "cx": 0.5, "cy": 0.94, "rx": 0.28, "ry": 0.08 },
+    { "name": "eyeL", "cx": 0.31, "cy": 0.366, "rx": 0.075, "ry": 0.05 },
+    { "name": "eyeR", "cx": 0.54, "cy": 0.366, "rx": 0.075, "ry": 0.05 },
+    { "name": "mouth", "cx": 0.52, "cy": 0.45, "rx": 0.05, "ry": 0.032 }
+  ]
+}

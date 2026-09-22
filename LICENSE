@@ -33,3 +33,22 @@ Third-party material this project does not redistribute:
 
 - DeepSeek Harness (`@deepseek-ai/*`) packages are consumed as dependencies and
   are not vendored here.
+
+- The `whale-maid` character art in `resources/characters/whale-maid/` is third
+  party material, not this project's own work:
+
+    Author: YunYueSama
+    Repository: https://github.com/YunYueSama/codex-deepseek-pet
+    Licence: 大肥鱼项目署名许可 1.0 — see
+             resources/characters/whale-maid/LICENSE-ASSET.txt for the full text
+             and LICENSE-ASSET.md for the attribution and a list of the
+             modifications this project made.
+
+  That licence permits use, modification, redistribution and commercial use
+  provided the author and repository are credited, the licence text is kept,
+  and modifications are declared — all of which the two files above do.
+
+  "DeepSeek Whale-chan" is a community-created derivative character. That
+  licence grants no rights in the underlying reference works, the character
+  design, or any trademark, and implies no endorsement by the original author
+  or by DeepSeek.

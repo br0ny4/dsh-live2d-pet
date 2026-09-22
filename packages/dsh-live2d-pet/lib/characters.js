@@ -53,6 +53,7 @@ async function readManifest(dir, id) {
       order: Number.isFinite(manifest.order) ? manifest.order : 100,
       sprite: typeof manifest.sprite === 'string' ? manifest.sprite : 'character.png',
       pet: typeof manifest.pet === 'string' ? manifest.pet : 'character-pet.png',
+      petBlink: typeof manifest.petBlink === 'string' ? manifest.petBlink : null,
       rig: typeof manifest.rig === 'string' ? manifest.rig : 'puppet.json',
       dir,
       root: dirname(dir),
@@ -97,9 +98,12 @@ export async function loadCharacter(id) {
   const character = (await listCharacters()).find((entry) => entry.id === id)
   if (character === undefined) return null
   try {
-    const [sprite, rigText] = await Promise.all([
+    const [sprite, rigText, blink] = await Promise.all([
       readFile(join(character.dir, character.pet)),
       readFile(join(character.dir, character.rig), 'utf8'),
+      character.petBlink === null
+        ? Promise.resolve(null)
+        : readFile(join(character.dir, character.petBlink)).catch(() => null),
     ])
     return {
       manifest: {
@@ -109,9 +113,13 @@ export async function loadCharacter(id) {
         author: character.author,
         license: character.license,
         builtin: character.builtin,
+        hasBlinkFrame: character.petBlink !== null,
       },
       rig: JSON.parse(rigText),
       sprite: sprite.toString('base64'),
+      // A paired closed-eye frame, when the character ships one. The renderer
+      // cross-fades to it instead of squashing the mesh.
+      spriteBlink: blink === null ? null : blink.toString('base64'),
       bytes: sprite.length,
     }
   } catch {

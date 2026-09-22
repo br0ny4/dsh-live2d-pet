@@ -1,5 +1,5 @@
 {
-  "$comment": "Motion rig. Derived automatically at import time; see scripts/lib/rig.mjs for how, and edit rig.overrides.json to correct it without losing the derivation.",
+  "$comment": "Motion rig: derived by scripts/lib/rig.mjs, then corrected by rig.overrides.json. Regenerate with `node scripts/character.mjs build --rerig`.",
   "sprite": "character.png",
   "canvas": {
     "width": 240,

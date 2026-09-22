@@ -110,6 +110,7 @@ async function applyCharacter(id) {
       manifest: payload.manifest,
       rig: payload.rig,
       sprite: `data:image/png;base64,${payload.sprite}`,
+      blinkSprite: payload.spriteBlink ? `data:image/png;base64,${payload.spriteBlink}` : null,
     })
   }
   return { ok: true, id: characterId }

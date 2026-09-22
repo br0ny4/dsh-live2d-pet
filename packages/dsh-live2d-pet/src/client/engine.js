@@ -52,8 +52,10 @@ const FRAGMENT_SHADER = `
 precision mediump float;
 varying vec2 vUV;
 uniform sampler2D uTex;
+uniform sampler2D uTexBlink;
+uniform float uBlinkMix;
 void main() {
-  vec4 c = texture2D(uTex, vUV);
+  vec4 c = mix(texture2D(uTex, vUV), texture2D(uTexBlink, vUV), uBlinkMix);
   // The sprite is straight-alpha; the canvas is premultiplied. Premultiplying
   // here (rather than letting the blender handle colour alone) is what keeps
   // the canvas's own alpha correct, so soft shading stays soft instead of
@@ -180,6 +182,8 @@ export function createCharacter(canvas, options) {
   const aPos = gl.getAttribLocation(program, 'aPos')
   const aUV = gl.getAttribLocation(program, 'aUV')
   const uTex = gl.getUniformLocation(program, 'uTex')
+  const uTexBlink = gl.getUniformLocation(program, 'uTexBlink')
+  const uBlinkMix = gl.getUniformLocation(program, 'uBlinkMix')
 
   // ---- static mesh topology ------------------------------------------------
   const vertexCount = (COLS + 1) * (ROWS + 1)
@@ -243,11 +247,24 @@ export function createCharacter(canvas, options) {
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
   gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false)
   gl.uniform1i(uTex, 0)
+  gl.uniform1i(uTexBlink, 1)
+  // With a paired blink frame the eyes close by swapping art, not by squashing
+  // the mesh — a drawn closed eye is simply better than a compressed open one.
+  const hasBlinkFrame = typeof options.blinkSprite === 'string' && options.blinkSprite !== ''
+  gl.uniform1f(uBlinkMix, 0)
 
   gl.enable(gl.BLEND)
   gl.blendFuncSeparate(gl.ONE, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA)
   gl.clearColor(0, 0, 0, 0)
 
+  const blinkTexture = gl.createTexture()
+  gl.bindTexture(gl.TEXTURE_2D, blinkTexture)
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
+
+  let blinkReady = !hasBlinkFrame
   const image = new Image()
   image.decoding = 'async'
   image.onload = () => {
@@ -256,11 +273,25 @@ export function createCharacter(canvas, options) {
     overlay.width = canvas.width
     overlay.height = canvas.height
     gl.viewport(0, 0, canvas.width, canvas.height)
+    gl.activeTexture(gl.TEXTURE0)
     gl.bindTexture(gl.TEXTURE_2D, texture)
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image)
     ready = true
   }
   image.src = options.sprite
+
+  if (hasBlinkFrame) {
+    const blinkImage = new Image()
+    blinkImage.decoding = 'async'
+    blinkImage.onload = () => {
+      gl.activeTexture(gl.TEXTURE1)
+      gl.bindTexture(gl.TEXTURE_2D, blinkTexture)
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, blinkImage)
+      gl.activeTexture(gl.TEXTURE0)
+      blinkReady = true
+    }
+    blinkImage.src = options.blinkSprite
+  }
 
   // A canvas that owns a WebGL context can never hand out a 2D one, so the
   // emblem layer is a second, transparent canvas stacked over the character.
@@ -298,6 +329,31 @@ export function createCharacter(canvas, options) {
       const anchor = emblemAnchor(now, i)
       ctx2d.globalAlpha = Math.sin(phase * Math.PI) * 0.9
       ctx2d.fillText('z', anchor.x, anchor.y - phase * size * 0.9)
+    }
+    ctx2d.restore()
+  }
+
+  /** A persistent state mark: without it, "thinking" and "idle" look alike. */
+  function drawStateMark(now) {
+    const anchor = emblemAnchor(now, 0)
+    const size = Math.max(10, overlay.width * 0.10)
+    ctx2d.save()
+    ctx2d.translate(anchor.x, anchor.y)
+    if (state.mood === 'waiting') {
+      ctx2d.fillStyle = 'rgba(240,170,60,0.95)'
+      ctx2d.font = `700 ${size}px ui-sans-serif, system-ui, sans-serif`
+      ctx2d.textAlign = 'center'
+      ctx2d.globalAlpha = 0.75 + Math.sin(now / 420) * 0.25
+      ctx2d.fillText('?', 0, 0)
+    } else {
+      ctx2d.fillStyle = 'rgba(120,150,225,0.9)'
+      for (let i = 0; i < 3; i++) {
+        const phase = (now / 900 - i * 0.18) % 1
+        ctx2d.globalAlpha = Math.max(0.15, Math.sin(phase * Math.PI))
+        ctx2d.beginPath()
+        ctx2d.arc((i - 1) * size * 0.3, 0, size * 0.09, 0, TAU)
+        ctx2d.fill()
+      }
     }
     ctx2d.restore()
   }
@@ -457,8 +513,10 @@ export function createCharacter(canvas, options) {
       for (const region of blinkRegions) {
         const w = weightAt(u, v, region)
         if (w === 0) continue
-        const widen = poke ? 0.2 : 0
-        py = region.cy + (py - region.cy) * (1 - w * (1 - state.blink) - w * widen)
+        if (!hasBlinkFrame) {
+          const widen = poke ? 0.2 : 0
+          py = region.cy + (py - region.cy) * (1 - w * (1 - state.blink) - w * widen)
+        }
         dx += (look.x - 0.5) * region.rx * 0.3 * w
         dy += (look.y - 0.5) * region.ry * 0.25 * w
       }
@@ -479,17 +537,24 @@ export function createCharacter(canvas, options) {
     }
 
     gl.clear(gl.COLOR_BUFFER_BIT)
+    if (hasBlinkFrame) {
+      gl.uniform1f(uBlinkMix, blinkReady ? 1 - state.blink : 0)
+    }
     gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer)
     gl.bufferSubData(gl.ARRAY_BUFFER, 0, positions)
     gl.drawElements(gl.TRIANGLES, indices.length, gl.UNSIGNED_SHORT, 0)
 
     // Emblems live on the overlay canvas; clear it only when it can have
     // content, so the common idle frame costs nothing.
-    if (emblemVisible !== (state.sleeping || state.reaction !== null)) {
-      emblemVisible = state.sleeping || state.reaction !== null
+    const busy = state.mood === 'thinking' || state.mood === 'working'
+    const stalled = state.mood === 'waiting'
+    const wanted = state.sleeping || state.reaction !== null || busy || stalled
+    if (emblemVisible !== wanted) {
+      emblemVisible = wanted
       ctx2d.clearRect(0, 0, overlay.width, overlay.height)
     }
     if (state.sleeping) drawSleep(now)
+    else if (busy || stalled) drawStateMark(now)
     if (state.reaction !== null) drawMark(state.reaction, now - state.moodSince)
   }
 
@@ -538,6 +603,7 @@ export function createCharacter(canvas, options) {
       gl.deleteBuffer(uvBuffer)
       gl.deleteBuffer(indexBuffer)
       gl.deleteTexture(texture)
+      gl.deleteTexture(blinkTexture)
       gl.deleteProgram(program)
     },
   }

@@ -1,14 +1,21 @@
 {
   "id": "whale-maid",
   "name": "DeepSeek 鲸鱼娘",
-  "description": "蓝发、鲸尾鳍耳的女仆装 Q 版角色，本项目的默认角色。",
-  "author": "项目原画",
-  "license": "见仓库 LICENSE",
+  "description": "DeepSeek 鲸鱼娘社区二创：蓝紫渐变长发、鲸鳍耳、鲸尾、女仆装。高清透明原画，含睁眼/闭眼两帧。",
+  "author": "YunYueSama",
+  "license": "大肥鱼项目署名许可 1.0（见 LICENSE-ASSET.md）",
   "builtin": true,
   "order": 10,
-  "source": "source.jpg",
+  "source": "source.png",
   "sprite": "character.png",
   "pet": "character-pet.png",
   "rig": "puppet.json",
-  "panel": 0
+  "panel": 0,
+  "blink": "character-blink.png",
+  "petBlink": "character-pet-blink.png",
+  "panels": {
+    "split": 2,
+    "sprite": 0,
+    "blink": 1
+  }
 }

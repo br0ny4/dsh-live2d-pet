@@ -136,30 +136,82 @@ async function buildOne(id, options) {
   const sourcePath = join(dir, sourceName)
   if (!(await exists(sourcePath))) throw new Error(`${id}: missing ${sourceName}`)
 
-  const result = await extractSprite({ source: sourcePath, panelIndex: character.panel ?? 0 })
+  const panels = character.panels || { sprite: character.panel ?? 0 }
+  const spriteIndex = panels.sprite ?? 0
+  const blinkIndex = Number.isInteger(panels.blink) ? panels.blink : null
+  const split = Number.isInteger(panels.split) && panels.split > 1 ? panels.split : null
+
+  /** Frame n of `split`, as a source-space column range. */
+  const rangeFor = async (index) => {
+    if (split === null) return null
+    const whole = await extractSprite({ source: sourcePath, panelIndex: 0 })
+    const left = whole.report.box.left
+    const width = whole.report.box.width
+    const step = width / split
+    return { x0: Math.round(left + step * index), x1: Math.round(left + step * (index + 1)) - 1 }
+  }
+
+  let result = await extractSprite({
+    source: sourcePath, panelIndex: spriteIndex, panelRange: await rangeFor(spriteIndex),
+  })
+  let blink = null
+
+  if (blinkIndex !== null) {
+    // Paired frames are cut with their **own** content boxes, not a shared one:
+    // side-by-side frames share no coordinate space, so a union across them
+    // would just be the whole sheet. They line up because the silhouette is
+    // identical between poses — which is also what makes this worth checking
+    // rather than assuming.
+    const other = await extractSprite({
+      source: sourcePath, panelIndex: blinkIndex, panelRange: await rangeFor(blinkIndex),
+    })
+    if (other.width !== result.width || other.height !== result.height) {
+      throw new Error(
+        `${id}: the paired frames do not share a silhouette `
+        + `(${result.width}x${result.height} vs ${other.width}x${other.height}); `
+        + 'a blink would jump. Re-export the frames with identical framing.',
+      )
+    }
+    blink = other
+  }
+
   await writeFile(join(dir, 'character.png'), await sharp(result.rgba, {
     raw: { width: result.width, height: result.height, channels: 4 },
   }).png({ compressionLevel: 9 }).toBuffer())
   await writeFile(join(dir, 'character-pet.png'), result.pet)
+  if (blink !== null) {
+    await writeFile(join(dir, 'character-blink.png'), await sharp(blink.rgba, {
+      raw: { width: blink.width, height: blink.height, channels: 4 },
+    }).png({ compressionLevel: 9 }).toBuffer())
+    await writeFile(join(dir, 'character-pet-blink.png'), blink.pet)
+  }
 
   const rigPath = join(dir, 'puppet.json')
-  const wantsRig = options.rerig || !(await exists(rigPath))
-  let rig
+  const derived = options.rerig || !(await exists(rigPath))
   let notes = []
-  if (wantsRig) {
-    const derived = deriveRig(result.rgba, result.width, result.height)
-    rig = {
+  if (derived) {
+    const fresh = deriveRig(result.rgba, result.width, result.height)
+    notes = fresh.notes
+    await writeFile(rigPath, `${JSON.stringify({
       $comment: 'Motion rig. Derived automatically at import time; see scripts/lib/rig.mjs for how, and edit rig.overrides.json to correct it without losing the derivation.',
       sprite: 'character.png',
       canvas: { width: result.petWidth, height: result.petHeight },
       grid: { cols: 24, rows: 44 },
-      influences: derived.influences,
-    }
-    notes = derived.notes
-    await writeFile(rigPath, `${JSON.stringify(rig, null, 2)}\n`)
-  } else {
-    rig = await loadRig(dir, { influences: [] })
+      influences: fresh.influences,
+    }, null, 2)}\n`)
   }
+
+  // The overrides are always folded back into puppet.json. They used to be
+  // applied only to the debug overlay, which meant a corrected rig looked right
+  // in review and was then ignored at runtime.
+  const rig = await loadRig(dir, { influences: [] })
+  await writeFile(rigPath, `${JSON.stringify({
+    $comment: 'Motion rig: derived by scripts/lib/rig.mjs, then corrected by rig.overrides.json. Regenerate with `node scripts/character.mjs build --rerig`.',
+    sprite: 'character.png',
+    canvas: { width: result.petWidth, height: result.petHeight },
+    grid: { cols: 24, rows: 44 },
+    influences: rig.influences,
+  }, null, 2)}\n`)
 
   await writeDebug(dir, result.rgba, result.width, result.height, rig)
 
@@ -168,7 +220,8 @@ async function buildOne(id, options) {
     dir,
     sprite: { width: result.width, height: result.height },
     pet: { width: result.petWidth, height: result.petHeight },
-    rigGenerated: wantsRig,
+    rigGenerated: derived,
+    hasBlink: blink !== null,
     influences: rig.influences.length,
     notes,
     report: result.report,
@@ -183,6 +236,7 @@ function report(result) {
   console.log(`  matte     ${((detail.paperPixels / detail.totalPixels) * 100).toFixed(1)}% paper, ${detail.softenedPixels} softened edge px`)
   console.log(`  sprite    ${result.sprite.width}x${result.sprite.height}`)
   console.log(`  pet       ${result.pet.width}x${result.pet.height}`)
+  console.log(`  blink     ${result.hasBlink ? 'paired frame, pixel-aligned' : 'none (mesh squash only)'}`)
   console.log(`  rig       ${result.rigGenerated ? 'derived' : 'kept existing'} — ${result.influences} influences`)
   for (const note of result.notes) console.log(`  ! ${note}`)
   console.log(`  overlay   ${join(result.dir, 'debug-overlay.png')}  <- check this`)

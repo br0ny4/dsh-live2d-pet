@@ -392,21 +392,33 @@ export async function extractSprite(options) {
   const occupied = preCut ? alphaOccupied : paperOccupied
 
   const panels = findPanels(pixels, width, height, 4, occupied)
-  if (panels.length === 0) {
+  const detected = settings.panelRange ? [settings.panelRange.x0, settings.panelRange.x1] : panels[settings.panelIndex]
+  if (panels.length === 0 && !settings.panelRange) {
     throw new Error(preCut
       ? 'no character found: the image is fully transparent'
       : 'no character panel found; the sheet background must be white, or supply a pre-cut transparent image')
   }
-  if (settings.panelIndex >= panels.length) {
+  if (!settings.panelRange && settings.panelIndex >= panels.length) {
     throw new Error(`panel ${settings.panelIndex} requested but only ${panels.length} found`)
   }
-  const [px0, px1] = panels[settings.panelIndex]
-  const box = contentBox(pixels, width, 4, px0, px1, 0, height, occupied)
+  // An explicit range overrides detection, for art whose frames are packed
+  // tightly enough that the between-frame gap is not a full blank column run.
+  const [px0, px1] = settings.panelRange
+    ? [settings.panelRange.x0, settings.panelRange.x1]
+    : panels[settings.panelIndex]
+  // An explicit box lets several frames of the same character share one crop.
+  // Multi-frame art (an open-eye and a closed-eye idle, say) only lines up if
+  // every frame is cut with identical edges; deriving each box independently
+  // makes the character jump by however much the two poses differ.
+  const box = settings.box
+    ? { minX: settings.box.left, maxX: settings.box.left + settings.box.width - 1,
+        minY: settings.box.top, maxY: settings.box.top + settings.box.height - 1 }
+    : contentBox(pixels, width, 4, px0, px1, 0, height, occupied)
 
-  const left = Math.max(0, box.minX - settings.padding)
-  const top = Math.max(0, box.minY - settings.padding)
-  const right = Math.min(width, box.maxX + 1 + settings.padding)
-  const bottom = Math.min(height, box.maxY + 1 + settings.padding)
+  const left = settings.box ? settings.box.left : Math.max(0, box.minX - settings.padding)
+  const top = settings.box ? settings.box.top : Math.max(0, box.minY - settings.padding)
+  const right = settings.box ? settings.box.left + settings.box.width : Math.min(width, box.maxX + 1 + settings.padding)
+  const bottom = settings.box ? settings.box.top + settings.box.height : Math.min(height, box.maxY + 1 + settings.padding)
   const cropW = right - left
   const cropH = bottom - top
 
@@ -468,6 +480,8 @@ export async function extractSprite(options) {
       panels,
       panelIndex: settings.panelIndex,
       box: { left, top, width: cropW, height: cropH },
+      /** Union-ready box in *source* coordinates, ignoring the padding. */
+      sourceBox: { left, top, right, bottom },
       paperPixels: paper,
       softenedPixels: softened,
       totalPixels: cropW * cropH,

@@ -57,6 +57,7 @@ async function fetchCharacter(id) {
     name: payload.manifest.name,
     rig: payload.rig,
     sprite: `data:image/png;base64,${payload.sprite}`,
+    blinkSprite: payload.spriteBlink ? `data:image/png;base64,${payload.spriteBlink}` : null,
   }
 }
 
@@ -179,7 +180,11 @@ export function apply(ctx) {
 
     React.useEffect(() => {
       if (!canvasRef.current) return undefined
-      const renderer = createCharacter(canvasRef.current, { rig: character.rig, sprite: character.sprite })
+      const renderer = createCharacter(canvasRef.current, {
+        rig: character.rig,
+        sprite: character.sprite,
+        blinkSprite: character.blinkSprite,
+      })
       characterRef.current = renderer
       return () => {
         renderer.dispose()

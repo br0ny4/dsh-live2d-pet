@@ -17,7 +17,8 @@
     "assets:live2d:list": "node scripts/fetch-live2d-assets.mjs --list",
     "characters": "node scripts/character.mjs list",
     "characters:build": "node scripts/character.mjs build",
-    "characters:rerig": "node scripts/character.mjs build --rerig"
+    "characters:rerig": "node scripts/character.mjs build --rerig",
+    "assets:whale-maid": "node scripts/fetch-whale-maid-art.mjs"
   },
   "devDependencies": {
     "ag-psd": "^31.0.2",

@@ -368,7 +368,11 @@ window.dshPet.onCharacter((character) => {
     // whatever the new character's silhouette is.
     buildMask(image)
     if (view.character) view.character.dispose()
-    view.character = createCharacter(el.canvas, { rig: character.rig, sprite: character.sprite })
+    view.character = createCharacter(el.canvas, {
+      rig: character.rig,
+      sprite: character.sprite,
+      blinkSprite: character.blinkSprite,
+    })
     render()
   }
   image.src = character.sprite

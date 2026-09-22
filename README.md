@@ -255,6 +255,22 @@ DeepSeek Harness 目前处于预发布（`0.1.5-rc.2`），客户端插件 API �
 - **Live2D Cubism Core** 与**官方样例模型**（Hiyori、Haru、Mao、Mark、Natori、Ren、Rice、Wanko）是株式会社 Live2D 的专有素材。按 Live2D 的许可，它们可以随应用分发，但不能作为独立文件再分发——所以由脚本按机器获取，不入库。
 - **DeepSeek Harness**（`@deepseek-ai/*`）作为依赖使用，不在此仓库内。
 
-`resources/live2d/models/whale-maid/` 是本项目自己的产出（由本仓库的原画经 psd2live 生成），随仓库分发。
+`resources/live2d/models/whale-maid/` 是本项目自己的产出（由本仓库的角色立绘经 psd2live 生成），随仓库分发。
+
+### 角色立绘的来源
+
+**「DeepSeek 鲸鱼娘 / 大肥鱼」是社区二创角色，不是本项目的原创作品，也不代表 DeepSeek 官方授权或认可。**
+
+`resources/characters/whale-maid/` 下的立绘来自第三方项目，按其许可随仓库分发：
+
+| | |
+|---|---|
+| 作者 | YunYueSama |
+| 仓库 | https://github.com/YunYueSama/codex-deepseek-pet |
+| 许可 | 大肥鱼项目署名许可 1.0（[全文](resources/characters/whale-maid/LICENSE-ASSET.txt)） |
+
+许可允许使用、修改、分享与商用，条件是保留署名、保留完整许可文本、并说明修改内容 —— 三者都记录在 [`LICENSE-ASSET.md`](resources/characters/whale-maid/LICENSE-ASSET.md)（由 `scripts/fetch-whale-maid-art.mjs` 生成，随素材一起更新）。
+
+**企鹅 Pip 则是本项目原创**（`scripts/make-penguin-art.mjs` 可复现），没有这层第三方约束。
 
 <sub>项目地址：https://github.com/br0ny4/dsh-live2d-pet</sub>

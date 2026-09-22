@@ -283,7 +283,13 @@ export function apply(ctx, config) {
   async function characterPayload(id) {
     const character = await loadCharacter(id)
     if (character === null) return { ok: false, error: `unknown character: ${id}` }
-    return { ok: true, manifest: character.manifest, rig: character.rig, sprite: character.sprite }
+    return {
+      ok: true,
+      manifest: character.manifest,
+      rig: character.rig,
+      sprite: character.sprite,
+      spriteBlink: character.spriteBlink,
+    }
   }
 
   function sendJson(res, status, body, cacheable) {
