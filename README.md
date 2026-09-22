@@ -166,10 +166,15 @@ pnpm test:model        # .moc3 模型结构校验（23 项）
 ./scripts/sync.sh "fix: 修掉抠图的通道步长 bug"
 ```
 
-两点须知：
+脚本会自动重试——这台机器到 GitHub 的连接是**成簇失败**的，第一次 push 挂掉、几秒后重试常常就好了。
 
-- 仓库自己的 `.git/config` 里把 `http.proxy` 置空了。这台机器的**全局** git 配置指向 `127.0.0.1:7890`，而那个代理并不总在运行——不覆盖的话 `git push` 会直接连不上。全局配置没有被改动。
-- `scripts/fetch-live2d-assets.mjs` 抓下来的 Cubism Core 与官方样例模型按 Live2D 的许可**不入库**；`live2d-pipeline/build`（420 MB 的 Gradle 发行版）与中间图层同样不入库。仓库里的 `resources/live2d/models/whale-maid/` 是本项目自己产出的模型。
+**这台机器上的通路是这样的**（排查花了些时间，写下来免得下次再踩）：
+
+- `github.com:443` 解析到的地址在这里**超时**，而 `api.github.com` 一直正常。这个组合意味着 `gh` 命令能用、`git push` 却会卡满 75 秒。
+- 所以 remote 走 **SSH**（`git@github.com:br0ny4/dsh-live2d-pet.git`），并在 `~/.ssh/config` 里把 `Host github.com` 映射到 `ssh.github.com:443`；本机 `id_ed25519` 已注册到账号。
+- 本仓库的 `.git/config` 里还把 `http.proxy` 置空了：全局 git 配置指向 `127.0.0.1:7890`，而那个代理并不总在运行。走 SSH 后这条已无关紧要，留着对 HTTPS 也无害。
+
+**入库范围**：Cubism Core 与 8 个官方样例模型（Live2D 专有素材，由 `pnpm assets:live2d` 按机器抓取）不入库；`live2d-pipeline/build`（420 MB Gradle 发行版）、构建产物与中间图层同样不入库。`resources/live2d/models/whale-maid/` 是本项目自己产出的模型，随仓库分发。
 
 ## 许可
 
