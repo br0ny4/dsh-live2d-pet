@@ -67,11 +67,12 @@
 
 .dshl2d-panel {
   pointer-events: auto;
-  position: absolute;
-  bottom: calc(100% + 10px);
-  left: 50%;
-  transform: translateX(-50%);
+  /* Fixed, and positioned by the script: the bubble flips above/below the pet
+     and clamps to the viewport, which plain CSS offsets cannot express. */
+  position: fixed;
   width: 292px;
+  max-height: calc(100vh - 16px);
+  overflow: auto;
   box-sizing: border-box;
   background: var(--dsw-specific-menu, #fff);
   color: var(--dsw-alias-label-primary, #111827);

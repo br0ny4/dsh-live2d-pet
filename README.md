@@ -6,11 +6,11 @@
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Version](https://img.shields.io/badge/version-0.1.0-informational.svg)](CHANGELOG.md)
-[![Tests](https://img.shields.io/badge/tests-77%20assertions-brightgreen.svg)](#测试)
+[![Tests](https://img.shields.io/badge/tests-99%20assertions-brightgreen.svg)](#测试)
 
 <img src="docs/images/pet-panel.png" alt="桌宠与指令面板" width="268" />
 &nbsp;&nbsp;
-<img src="docs/images/pet-penguin.png" alt="企鹅 Pip 与角色切换" width="268" />
+<img src="docs/images/pet-gugu.png" alt="咕咕嘎嘎" width="268" />
 
 </div>
 
@@ -107,9 +107,9 @@ npx electron . --dev                # 详细日志
 
 自带两个，也接受你自己的：
 
-| <img src="docs/images/character-whale-maid.png" width="120" /> | <img src="docs/images/character-penguin.png" width="120" /> |
+| <img src="docs/images/character-whale-maid.png" width="120" /> | <img src="docs/images/character-gugu.png" width="120" /> |
 |---|---|
-| **DeepSeek 鲸鱼娘**（默认） | **企鹅 Pip**（本项目原创） |
+| **DeepSeek 鲸鱼娘**（默认，网格形变 + 真眨眼） | **咕咕嘎嘎**（帧动画图集） |
 
 在指令气泡的「角色」下拉框里切换。要用自己的三视图：
 
@@ -165,7 +165,7 @@ scripts/
   lib/matte.mjs             抠图：白纸参考稿与透明图两条路
   lib/rig.mjs               自动绑骨：轮廓、双眼、喙/嘴、躯干、鳍、脚
   fetch-live2d-assets.mjs   抓取 Cubism Core 与官方样例模型
-  make-penguin-art.mjs      生成原创企鹅角色的三视图
+  fetch-gugu-assets.mjs     抓取咕咕嘎嘎帧动画图集并生成来源说明
   make-doc-images.mjs       合成 README 用图
   live2d-*.sh               psd2live 构建与运行
 docs/
@@ -174,7 +174,7 @@ docs/
   VERSIONING.md              版本管理计划
 resources/
   characters/whale-maid/     内置角色：立绘、骨架、原画
-  characters/penguin/        内置角色：原创企鹅三视图
+  characters/gugu/           内置角色：帧动画图集（含 PROVENANCE.md）
   live2d/models/whale-maid/  自产的 Cubism 4 模型
 live2d-pipeline/             分层 PSD → .moc3 的生产流水线（独立 README）
 ```
@@ -206,9 +206,12 @@ DSH_HOME=/tmp/pet-dev npx electron packages/dsh-pet-shell --attach-only --dev
 ## 测试
 
 ```bash
-pnpm test              # 全部 77 项断言
-pnpm test:bridge       # Host 桥 41 项
+pnpm test              # 全部 99 项断言
+pnpm test:bridge       # Host 桥 43 项
+pnpm test:harness      # 真 harness 端到端 11 项（无 dsh 时自动跳过）
 pnpm test:shell        # 外壳端到端 13 项
+pnpm test:harness      # 真 harness 端到端 11 项
+pnpm test:failover     # 路由故障切换 9 项
 pnpm test:model        # 模型结构 23 项
 ```
 
@@ -259,7 +262,7 @@ DeepSeek Harness 目前处于预发布（`0.1.5-rc.2`），客户端插件 API �
 
 ### 角色立绘的来源
 
-**「DeepSeek 鲸鱼娘 / 大肥鱼」是社区二创角色，不是本项目的原创作品，也不代表 DeepSeek 官方授权或认可。**
+**「DeepSeek 鲸鱼娘 / 大肥鱼」与「咕咕嘎嘎」都是社区二创角色，不是本项目的原创作品，也不代表任何官方授权或认可。**
 
 `resources/characters/whale-maid/` 下的立绘来自第三方项目，按其许可随仓库分发：
 
@@ -271,6 +274,8 @@ DeepSeek Harness 目前处于预发布（`0.1.5-rc.2`），客户端插件 API �
 
 许可允许使用、修改、分享与商用，条件是保留署名、保留完整许可文本、并说明修改内容 —— 三者都记录在 [`LICENSE-ASSET.md`](resources/characters/whale-maid/LICENSE-ASSET.md)（由 `scripts/fetch-whale-maid-art.mjs` 生成，随素材一起更新）。
 
-**企鹅 Pip 则是本项目原创**（`scripts/make-penguin-art.mjs` 可复现），没有这层第三方约束。
+**「咕咕嘎嘎」**的情况更要如实说明：形象基础是《明日方舟：终末地》的「管理员」二创企鹅，底层 IP 属 Hypergryph；定义性图片的 B 站创作者已完成著作权登记，字节跳动也登记了美术形象著作权——三方主张并存，**任何人都无法给出干净授权**。素材取自无许可证的帧动画图集仓库，按项目所有者的明确决定使用；[`PROVENANCE.md`](resources/characters/gugu/PROVENANCE.md) 记录了全部事实，分发时请保留。
+
+旧版内置角色「企鹅 Pip」已按所有者要求移除（可在 git 历史中找回）。
 
 <sub>项目地址：https://github.com/br0ny4/dsh-live2d-pet</sub>

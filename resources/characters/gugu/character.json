@@ -1,0 +1,63 @@
+{
+  "id": "gugu",
+  "name": "咕咕嘎嘎",
+  "description": "终末地管理员二创企鹅：黑色毛绒外套、白肚皮、黄嘴黄脚。帧动画角色。",
+  "author": "guleguleguru/gugugaga-pet",
+  "license": "无许可证；形象为多方争议 IP。见 PROVENANCE.md。",
+  "builtin": true,
+  "order": 20,
+  "kind": "atlas",
+  "atlas": "atlas.png",
+  "grid": {
+    "cols": 9,
+    "rows": 8,
+    "cellWidth": 192,
+    "cellHeight": 208
+  },
+  "animations": {
+    "idle": {
+      "row": 0,
+      "frames": 7,
+      "fps": 4
+    },
+    "working": {
+      "row": 1,
+      "frames": 9,
+      "fps": 6
+    },
+    "waiting": {
+      "row": 2,
+      "frames": 9,
+      "fps": 4
+    },
+    "done": {
+      "row": 3,
+      "frames": 5,
+      "fps": 6
+    },
+    "poke": {
+      "row": 4,
+      "frames": 6,
+      "fps": 8
+    },
+    "error": {
+      "row": 5,
+      "frames": 9,
+      "fps": 5
+    },
+    "sleep": {
+      "row": 6,
+      "frames": 7,
+      "fps": 2
+    }
+  },
+  "moodMap": {
+    "idle": "idle",
+    "thinking": "working",
+    "working": "working",
+    "waiting": "waiting",
+    "done": "done",
+    "error": "error",
+    "sleeping": "sleep"
+  }
+}

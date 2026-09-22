@@ -96,6 +96,10 @@ body {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  /* The window is a fixed size; a tall panel (a long error note, say) would
+     otherwise overflow the top and be clipped by the transparent window. */
+  max-height: calc(100vh - 190px);
+  overflow-y: auto;
   padding: 11px;
   border-radius: 15px;
   background: rgba(20, 26, 42, 0.94);

@@ -53,12 +53,17 @@ const view = {
 // Hit testing: the sprite's alpha channel decides where the window is "solid".
 // ---------------------------------------------------------------------------
 
-function buildMask(image) {
+function buildMask(image, cell) {
   const canvas = document.createElement('canvas')
-  canvas.width = image.naturalWidth
-  canvas.height = image.naturalHeight
+  // An atlas character has no standalone sprite: its silhouette comes from one
+  // cell (idle frame 0), which is representative enough for hit testing.
+  const width = cell ? cell.cellWidth : image.naturalWidth
+  const height = cell ? cell.cellHeight : image.naturalHeight
+  canvas.width = width
+  canvas.height = height
   const context = canvas.getContext('2d', { willReadFrequently: true })
-  context.drawImage(image, 0, 0)
+  if (cell) context.drawImage(image, 0, 0, width, height, 0, 0, width, height)
+  else context.drawImage(image, 0, 0)
   const data = context.getImageData(0, 0, canvas.width, canvas.height).data
   const mask = new Uint8Array(canvas.width * canvas.height)
   for (let i = 0; i < mask.length; i++) mask[i] = data[i * 4 + 3]
@@ -362,20 +367,31 @@ window.dshPet.onCharacters((characters) => {
 
 window.dshPet.onCharacter((character) => {
   view.current = character
-  const image = new Image()
-  image.onload = () => {
-    // The hit mask follows the sprite: the window's interactive shape is
-    // whatever the new character's silhouette is.
-    buildMask(image)
+  const apply = () => {
     if (view.character) view.character.dispose()
     view.character = createCharacter(el.canvas, {
       rig: character.rig,
       sprite: character.sprite,
       blinkSprite: character.blinkSprite,
+      atlas: character.atlas,
+      grid: character.grid,
+      animations: character.animations,
+      moodMap: character.moodMap,
+      // The screenshot pipeline must not capture a canvas that has not painted
+      // its first frame yet: that race produced intermittently blank captures.
+      onReady: () => window.dshPet.canvasReady(),
     })
     render()
   }
-  image.src = character.sprite
+  // The hit mask follows the art: a sprite character's own alpha, or an atlas
+  // character's idle cell. Rendering an atlas with `sprite: null` was how a
+  // CSP violation ("file://...null") and a blank first capture happened.
+  const image = new Image()
+  image.onload = () => {
+    buildMask(image, character.atlas ? character.grid : undefined)
+    apply()
+  }
+  image.src = character.atlas || character.sprite
   renderCharacterOptions()
 })
 

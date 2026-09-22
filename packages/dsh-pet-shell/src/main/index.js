@@ -46,6 +46,8 @@ let connectTimer = null
 let ownedHarness = null
 let status = { mode: 'starting', detail: '正在寻找 harness…', attachedPid: null, url: null }
 let lastState = null
+/** The renderer flips this after the character's first painted frame. */
+let canvasPainted = false
 /** Character selection, persisted beside the app's other state. */
 let characterId = null
 let characters = []
@@ -103,14 +105,19 @@ async function applyCharacter(id) {
   const payload = await fetchCharacter(discovery, id)
   if (!payload || payload.ok !== true) return { ok: false, error: String((payload && payload.error) || '加载失败') }
   characterId = payload.manifest.id
+  canvasPainted = false
   notice(`character=${characterId} (${payload.manifest.name})`)
   await writePreferredCharacter(characterId)
   if (petWindow && !petWindow.isDestroyed()) {
     petWindow.webContents.send('pet:character', {
       manifest: payload.manifest,
       rig: payload.rig,
-      sprite: `data:image/png;base64,${payload.sprite}`,
+      sprite: payload.sprite ? `data:image/png;base64,${payload.sprite}` : null,
       blinkSprite: payload.spriteBlink ? `data:image/png;base64,${payload.spriteBlink}` : null,
+      atlas: payload.atlas ? `data:image/png;base64,${payload.atlas}` : null,
+      grid: payload.grid,
+      animations: payload.animations,
+      moodMap: payload.moodMap,
     })
   }
   return { ok: true, id: characterId }
@@ -335,6 +342,10 @@ ipcMain.handle('pet:set-character', async (_event, id) => {
   return applyCharacter(id)
 })
 
+ipcMain.on('pet:canvas-ready', () => {
+  canvasPainted = true
+})
+
 ipcMain.on('pet:set-interactive', (_event, interactive) => {
   if (petWindow === null || petWindow.isDestroyed()) return
   petWindow.setIgnoreMouseEvents(!interactive, { forward: true })
@@ -368,15 +379,36 @@ app.whenReady().then(async () => {
     setTimeout(async () => {
       try {
         if (ARGS.includes('--with-panel')) {
-          // Documentation shot: toggle the bubble the way a click would.
-          await petWindow.webContents.executeJavaScript(`(() => {
-            const pet = document.getElementById('pet')
-            for (const type of ['pointerdown', 'pointerup']) {
-              pet.dispatchEvent(new PointerEvent(type, { bubbles: true, clientX: 0, clientY: 0 }))
-            }
-          })()`)
-          await new Promise((resolve) => setTimeout(resolve, 600))
+          // Open the bubble the way a click would, and *check* it opened: the
+          // synthetic events race the page's own load, so a single dispatch
+          // silently does nothing maybe a third of the time.
+          for (let attempt = 0; attempt < 5; attempt++) {
+            const opened = await petWindow.webContents.executeJavaScript(`(() => {
+              const panel = document.getElementById('panel')
+              if (panel === null) return false
+              if (!panel.hidden) return true
+              const pet = document.getElementById('pet')
+              for (const type of ['pointerdown', 'pointerup']) {
+                pet.dispatchEvent(new PointerEvent(type, { bubbles: true, clientX: 0, clientY: 0 }))
+              }
+              return !panel.hidden
+            })()`)
+            if (opened) break
+            await new Promise((resolve) => setTimeout(resolve, 300))
+          }
+          const ready = await petWindow.webContents.executeJavaScript(
+            "!document.getElementById('panel').hidden",
+          )
+          if (!ready) console.log('[shell] warning: the command panel did not open for the screenshot')
+          await new Promise((resolve) => setTimeout(resolve, 400))
         }
+        // A canvas that has not painted yet captures as a blank window. Wait
+        // for the renderer's explicit readiness signal instead of a timer.
+        const paintDeadline = Date.now() + 15_000
+        while (!canvasPainted && Date.now() < paintDeadline) {
+          await new Promise((resolve) => setTimeout(resolve, 150))
+        }
+        if (!canvasPainted) console.log('[shell] warning: canvas never painted; capturing anyway')
         const image = await petWindow.capturePage()
         await writeFile(SHOT, image.toPNG())
         console.log(`screenshot: ${SHOT}`)

@@ -14,6 +14,7 @@ contextBridge.exposeInMainWorld('dshPet', {
   send: (args) => ipcRenderer.invoke('pet:send', args),
   refresh: () => ipcRenderer.invoke('pet:refresh'),
   setInteractive: (interactive) => ipcRenderer.send('pet:set-interactive', Boolean(interactive)),
+  canvasReady: () => ipcRenderer.send('pet:canvas-ready'),
   moveBy: (dx, dy) => ipcRenderer.send('pet:move-by', { dx, dy }),
   openHarness: () => ipcRenderer.send('pet:open-harness'),
 })

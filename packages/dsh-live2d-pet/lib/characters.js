@@ -54,6 +54,12 @@ async function readManifest(dir, id) {
       sprite: typeof manifest.sprite === 'string' ? manifest.sprite : 'character.png',
       pet: typeof manifest.pet === 'string' ? manifest.pet : 'character-pet.png',
       petBlink: typeof manifest.petBlink === 'string' ? manifest.petBlink : null,
+      /** Frame-atlas characters carry their own media and playback spec. */
+      kind: manifest.kind === 'atlas' ? 'atlas' : 'sprite',
+      atlas: typeof manifest.atlas === 'string' ? manifest.atlas : null,
+      grid: manifest.grid && typeof manifest.grid === 'object' ? manifest.grid : null,
+      animations: manifest.animations && typeof manifest.animations === 'object' ? manifest.animations : null,
+      moodMap: manifest.moodMap && typeof manifest.moodMap === 'object' ? manifest.moodMap : null,
       rig: typeof manifest.rig === 'string' ? manifest.rig : 'puppet.json',
       dir,
       root: dirname(dir),
@@ -84,7 +90,13 @@ export async function listCharacters() {
       if (byId.has(entry.name)) continue
       const manifest = await readManifest(dir, entry.name)
       if (manifest === null) continue
-      if (!existsSync(join(dir, manifest.pet)) || !existsSync(join(dir, manifest.rig))) continue
+      // A sprite character needs a pet sprite and a rig; an atlas character
+      // needs its atlas and an animation table. Anything else is unusable.
+      if (manifest.kind === 'atlas') {
+        if (manifest.atlas === null || !existsSync(join(dir, manifest.atlas))) continue
+      } else if (!existsSync(join(dir, manifest.pet)) || !existsSync(join(dir, manifest.rig))) {
+        continue
+      }
       byId.set(entry.name, manifest)
     }
   }
@@ -98,6 +110,28 @@ export async function loadCharacter(id) {
   const character = (await listCharacters()).find((entry) => entry.id === id)
   if (character === undefined) return null
   try {
+    if (character.kind === 'atlas') {
+      const atlas = await readFile(join(character.dir, character.atlas))
+      return {
+        manifest: {
+          id: character.id,
+          name: character.name,
+          description: character.description,
+          author: character.author,
+          license: character.license,
+          builtin: character.builtin,
+          kind: 'atlas',
+        },
+        rig: null,
+        sprite: null,
+        spriteBlink: null,
+        atlas: atlas.toString('base64'),
+        grid: character.grid,
+        animations: character.animations,
+        moodMap: character.moodMap,
+        bytes: atlas.length,
+      }
+    }
     const [sprite, rigText, blink] = await Promise.all([
       readFile(join(character.dir, character.pet)),
       readFile(join(character.dir, character.rig), 'utf8'),
@@ -113,6 +147,7 @@ export async function loadCharacter(id) {
         author: character.author,
         license: character.license,
         builtin: character.builtin,
+        kind: 'sprite',
         hasBlinkFrame: character.petBlink !== null,
       },
       rig: JSON.parse(rigText),

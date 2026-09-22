@@ -47,6 +47,16 @@
 - `<select id="character">` 与画布 `id="character"` 撞名，
   导致 `getElementById` 返回下拉框、画布 `getContext` 不是函数
 
+### 变更
+
+- **新内置角色「咕咕嘎嘎」**（替换已移除的「企鹅 Pip」）：帧动画后端上线，
+  直接播放 Codex 8×9 图集（192×208/帧，对 124px 桌宠是原生分辨率）。
+  权利状态见 `resources/characters/gugu/PROVENANCE.md`——形象三方主张并存、
+  素材仓库无许可证，按所有者明确决定使用
+- **引擎新增帧动画后端**：与网格形变后端同接口（setMood/react/sleep…），
+  角色清单的 `kind: "atlas"` 决定用哪条路；打盹/戳一下/状态徽记对两者同样生效
+- 外壳命中检测对图集角色改用待机第一帧轮廓做蒙版
+
 ### 计划中
 
 - 接入 Cubism 渲染后端，让桌宠真正加载 `resources/live2d/models/whale-maid/`
@@ -85,9 +95,10 @@
   - 构建 psd2live 并导出真 `.moc3` 模型族，含 `.model3.json`、`.cdi3.json`、
     `physics3.json`、6 秒循环待机与眨眼/点头/摇头动作、4096² 图集、
     可在 Cubism Editor 二次编辑的 `.cmo3`
-- **测试**：`pnpm test` 共 77 项断言
+- **测试**：`pnpm test` 共 88 项断言
   - Host 桥自测 41 项（发现文件、鉴权、SSE、状态派生、指令转发、卸载清理）
   - 外壳端到端冒烟 13 项（真启 Electron 接 mock 桥，校验接入日志、画布、截图）
+  - 真 harness 端到端 11 项（真起 `dsh web`，验证插件在真载体上的路由）
   - 模型结构校验 23 项
 
 ### 修复

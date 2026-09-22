@@ -105,6 +105,9 @@ function compile(gl, type, source) {
 }
 
 export function createCharacter(canvas, options) {
+  if (options.animations && options.atlas) {
+    return createFrameCharacter(canvas, options)
+  }
   const rig = options.rig || { influences: [] }
   const regions = rig.influences || []
   const swayRegions = regions.filter((r) => r.motion === 'sway')
@@ -543,6 +546,7 @@ export function createCharacter(canvas, options) {
     gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer)
     gl.bufferSubData(gl.ARRAY_BUFFER, 0, positions)
     gl.drawElements(gl.TRIANGLES, indices.length, gl.UNSIGNED_SHORT, 0)
+    reportFirstFrame()
 
     // Emblems live on the overlay canvas; clear it only when it can have
     // content, so the common idle frame costs nothing.
@@ -556,6 +560,15 @@ export function createCharacter(canvas, options) {
     if (state.sleeping) drawSleep(now)
     else if (busy || stalled) drawStateMark(now)
     if (state.reaction !== null) drawMark(state.reaction, now - state.moodSince)
+  }
+
+  // The screenshot pipeline waits for the first painted frame; a capture that
+  // races it comes back blank.
+  let firstFrameReported = false
+  const reportFirstFrame = () => {
+    if (firstFrameReported || !ready) return
+    firstFrameReported = true
+    if (typeof options.onReady === 'function') options.onReady()
   }
 
   raf = requestAnimationFrame(frame)
@@ -605,6 +618,251 @@ export function createCharacter(canvas, options) {
       gl.deleteTexture(texture)
       gl.deleteTexture(blinkTexture)
       gl.deleteProgram(program)
+    },
+  }
+}
+
+/**
+ * Frame-animation backend.
+ *
+ * Some characters ship as Codex-style sprite atlases — one grid of cells, one
+ * row per animation — rather than a static sprite with a deformation rig. The
+ * meme characters on the internet basically all come in this form (192x208 per
+ * cell, which is *native* resolution for a 124px pet), so this backend plays
+ * those rows directly instead of warping a single image.
+ *
+ * Same public surface as the mesh backend: the UI layers cannot tell them
+ * apart, and a character's manifest decides which one it uses.
+ */
+function createFrameCharacter(canvas, options) {
+  const grid = options.grid || { cols: 9, rows: 8, cellWidth: 192, cellHeight: 208 }
+  const animations = options.animations || {}
+  const moodMap = options.moodMap || { idle: 'idle', thinking: 'working', working: 'working', waiting: 'waiting', done: 'done', error: 'error', sleeping: 'sleep' }
+  const reactionMap = options.reactionMap || { poke: 'poke', done: 'done', error: 'error' }
+
+  const sleepAfterMs = options.sleepAfterMs || 120000
+  const idleReaction = 'poke'
+
+  const ctx2d = canvas.getContext('2d')
+  if (ctx2d === null) {
+    // No 2D context is not a recoverable situation for this backend.
+    return { setMood() {}, setTalking() {}, setPointer() {}, react() {}, setDragging() {}, setSleepAfter() {}, isSleeping() { return false }, dispose() {} }
+  }
+
+  // The emblems ride a second transparent canvas, exactly like the mesh path:
+  // clearing and redrawing them must never touch the character itself.
+  const overlay = canvas.ownerDocument.createElement('canvas')
+  overlay.style.position = 'absolute'
+  overlay.style.inset = '0'
+  overlay.style.width = '100%'
+  overlay.style.height = '100%'
+  overlay.style.pointerEvents = 'none'
+  if (canvas.parentElement !== null) canvas.parentElement.appendChild(overlay)
+  const emblems = overlay.getContext('2d')
+
+  const image = new Image()
+  image.decoding = 'async'
+  let ready = false
+  let disposed = false
+  let raf = 0
+  let firstFrameReported = false
+
+  const state = {
+    mood: 'idle',
+    sleeping: false,
+    idleSince: 0,
+    animation: 'idle',
+    frame: 0,
+    frameAt: 0,
+    reaction: null,
+    reactionLoop: 0,
+    pointer: { x: 0.5, y: 0.5, active: false },
+  }
+
+  function animationFor(mood) {
+    return moodMap[mood] || animations.idle ? (moodMap[mood] || 'idle') : 'idle'
+  }
+
+  function cell(animation, frameIndex) {
+    const spec = animations[animation]
+    if (spec === undefined) return { sx: 0, sy: 0 }
+    const row = spec.row
+    const index = frameIndex % Math.max(1, spec.frames || 1)
+    return { sx: index * grid.cellWidth, sy: row * grid.cellHeight }
+  }
+
+  function drawFrame(animation, frameIndex) {
+    const spec = animations[animation]
+    if (spec === undefined) return
+    const { sx, sy } = cell(animation, frameIndex)
+    ctx2d.clearRect(0, 0, canvas.width, canvas.height)
+    ctx2d.drawImage(image, sx, sy, grid.cellWidth, grid.cellHeight, 0, 0, canvas.width, canvas.height)
+  }
+
+  // ---- the emblem layer, kept small and self-contained ---------------------
+  const TAU = Math.PI * 2
+  function anchor(now, index) {
+    const size = Math.min(canvas.width, canvas.height)
+    return {
+      x: canvas.width * (0.5 + index * 0.22),
+      y: canvas.height * (0.14 + Math.sin(now / 520 + index) * 0.03),
+      size,
+    }
+  }
+  function drawEmblems(now) {
+    if (emblems === null) return
+    emblems.clearRect(0, 0, overlay.width, overlay.height)
+    const mood = state.sleeping ? 'sleeping' : state.mood
+    if (state.sleeping) {
+      const a = anchor(now, 0)
+      emblems.fillStyle = 'rgba(146,166,214,0.95)'
+      emblems.font = `700 ${a.size * 0.16}px ui-sans-serif, system-ui, sans-serif`
+      emblems.textAlign = 'center'
+      for (let i = 0; i < 3; i++) {
+        const phase = ((now / 1600) + i * 0.33) % 1
+        emblems.globalAlpha = Math.sin(phase * Math.PI) * 0.9
+        emblems.fillText('z', anchor(now, i).x, anchor(now, i).y - phase * a.size * 0.14)
+      }
+      emblems.globalAlpha = 1
+    } else if (mood === 'thinking' || mood === 'working') {
+      const a = anchor(now, 0)
+      emblems.fillStyle = 'rgba(120,150,225,0.9)'
+      for (let i = 0; i < 3; i++) {
+        const phase = (now / 900 - i * 0.18) % 1
+        emblems.globalAlpha = Math.max(0.15, Math.sin(phase * Math.PI))
+        emblems.beginPath()
+        emblems.arc(a.x + (i - 1) * a.size * 0.1, a.y, a.size * 0.03, 0, TAU)
+        emblems.fill()
+      }
+      emblems.globalAlpha = 1
+    } else if (mood === 'waiting') {
+      const a = anchor(now, 0)
+      emblems.fillStyle = 'rgba(240,170,60,0.95)'
+      emblems.font = `700 ${a.size * 0.17}px ui-sans-serif, system-ui, sans-serif`
+      emblems.textAlign = 'center'
+      emblems.globalAlpha = 0.75 + Math.sin(now / 420) * 0.25
+      emblems.fillText('?', a.x, a.y)
+      emblems.globalAlpha = 1
+    } else if (state.reaction === 'poke') {
+      const a = anchor(now, 1)
+      emblems.fillStyle = '#ffb020'
+      emblems.strokeStyle = 'rgba(45,32,10,0.5)'
+      emblems.lineWidth = Math.max(1, a.size * 0.02)
+      emblems.translate(a.x, a.y)
+      emblems.beginPath()
+      emblems.moveTo(-a.size * 0.025, -a.size * 0.17)
+      emblems.lineTo(a.size * 0.025, -a.size * 0.17)
+      emblems.lineTo(a.size * 0.016, -a.size * 0.03)
+      emblems.lineTo(-a.size * 0.016, -a.size * 0.03)
+      emblems.closePath()
+      emblems.fill()
+      emblems.stroke()
+      emblems.beginPath()
+      emblems.arc(0, a.size * 0.02, a.size * 0.03, 0, TAU)
+      emblems.fill()
+      emblems.stroke()
+    } else if (state.reaction === 'error') {
+      const a = anchor(now, 1)
+      emblems.fillStyle = '#63b3ff'
+      emblems.translate(a.x, a.y)
+      emblems.beginPath()
+      emblems.moveTo(0, -a.size * 0.17)
+      emblems.bezierCurveTo(a.size * 0.14, -a.size * 0.02, a.size * 0.11, a.size * 0.14, 0, a.size * 0.14)
+      emblems.bezierCurveTo(-a.size * 0.11, a.size * 0.14, -a.size * 0.14, -a.size * 0.02, 0, -a.size * 0.17)
+      emblems.fill()
+    }
+  }
+
+  function frame(now) {
+    if (disposed) return
+    raf = requestAnimationFrame(frame)
+    if (!ready) return
+
+    // ---- behaviour ----
+    if (state.mood === 'idle' && !state.sleeping && now - state.idleSince > sleepAfterMs) {
+      state.sleeping = true
+    }
+    if (state.mood !== 'idle' && state.sleeping) {
+      state.sleeping = false
+    }
+
+    // A reaction plays its animation for one loop, then the mood takes over.
+    if (state.reaction !== null) {
+      const spec = animations[reactionMap[state.reaction]]
+      const loopMs = ((spec ? spec.frames : 6) / (spec ? spec.fps : 6)) * 1000
+      if (now - state.frameAt > loopMs) {
+        state.reaction = null
+        state.frame = 0
+      }
+    }
+
+    const target = state.sleeping
+      ? (moodMap.sleeping || 'sleep')
+      : state.reaction !== null
+        ? (reactionMap[state.reaction] || 'idle')
+        : animationFor(state.mood)
+    const spec = animations[target] || animations.idle
+    const fps = spec ? spec.fps : 4
+    const frameMs = 1000 / fps
+
+    if (state.animation !== target) {
+      state.animation = target
+      state.frame = 0
+      state.frameAt = now
+    } else if (now - state.frameAt >= frameMs) {
+      state.frame += 1
+      state.frameAt = now
+    }
+
+    drawFrame(state.animation, state.frame)
+    drawEmblems(now)
+
+    if (!firstFrameReported) {
+      firstFrameReported = true
+      if (typeof options.onReady === 'function') options.onReady()
+    }
+  }
+
+  image.onload = () => {
+    canvas.width = grid.cellWidth
+    canvas.height = grid.cellHeight
+    overlay.width = canvas.width
+    overlay.height = canvas.height
+    ready = true
+  }
+  image.src = options.atlas
+  raf = requestAnimationFrame(frame)
+
+  return {
+    setMood(next) {
+      if (next === state.mood) return
+      state.mood = next
+      state.idleSince = next === 'idle' ? performance.now() : state.idleSince
+      state.sleeping = false
+    },
+    setTalking() {},
+    setPointer(x, y, active) {
+      state.pointer = { x, y, active: active !== false }
+      if (active !== false) state.idleSince = performance.now()
+    },
+    react(kind) {
+      state.reaction = kind
+      state.frame = 0
+      state.frameAt = performance.now()
+      if (kind === 'poke') state.sleeping = false
+    },
+    setDragging() {},
+    setSleepAfter(ms) {
+      if (Number.isFinite(ms) && ms > 0) options.sleepAfterMs = ms
+    },
+    isSleeping() {
+      return state.sleeping
+    },
+    dispose() {
+      disposed = true
+      cancelAnimationFrame(raf)
+      image.onload = null
+      if (overlay.parentElement !== null) overlay.parentElement.removeChild(overlay)
     },
   }
 }

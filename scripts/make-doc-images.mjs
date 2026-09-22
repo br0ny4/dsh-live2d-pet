@@ -13,7 +13,7 @@
  *   DSH_HOME=<that dir> npx electron packages/dsh-pet-shell --attach-only \
  *     --with-panel --screenshot docs/images/pet-panel-raw.png
  *   DSH_HOME=<that dir> npx electron packages/dsh-pet-shell --attach-only \
- *     --character penguin --with-panel --screenshot docs/images/pet-penguin-raw.png
+ *     --character gugu --with-panel --screenshot docs/images/pet-gugu-raw.png
  *
  * Then:
  *
@@ -27,7 +27,7 @@ import sharp from 'sharp'
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 const IMAGES = join(ROOT, 'docs', 'images')
 const RAW = join(IMAGES, 'pet-panel-raw.png')
-const RAW_PENGUIN = join(IMAGES, 'pet-penguin-raw.png')
+const RAW_GUGU = join(IMAGES, 'pet-gugu-raw.png')
 
 const WIDTH = 680
 const HEIGHT = 1120
@@ -78,14 +78,18 @@ async function main() {
   }
 
   await compose(RAW, 'pet-panel.png')
-  await compose(RAW_PENGUIN, 'pet-penguin.png')
+  await compose(RAW_GUGU, 'pet-gugu.png')
 
   // Just the character, for the section about the renderer.
-  for (const id of ['whale-maid', 'penguin']) {
-    const character = await sharp(join(ROOT, 'resources', 'characters', id, 'character.png'))
-      .resize({ width: 300 })
-      .png({ compressionLevel: 9 })
-      .toBuffer()
+  for (const id of ['whale-maid', 'gugu']) {
+    // A sprite character ships a full sprite; an atlas character shows its
+    // idle cell.
+    const source = id === 'gugu'
+      ? await sharp(join(ROOT, 'resources', 'characters', id, 'atlas.png'))
+          .extract({ left: 0, top: 0, width: 192, height: 208 })
+          .png().toBuffer()
+      : await sharp(join(ROOT, 'resources', 'characters', id, 'character.png')).png().toBuffer()
+    const character = await sharp(source).resize({ width: 300 }).png({ compressionLevel: 9 }).toBuffer()
     await writeFile(join(IMAGES, `character-${id}.png`), character)
     console.log(`docs/images/character-${id}.png (${(character.length / 1024).toFixed(0)} KB)`)
   }

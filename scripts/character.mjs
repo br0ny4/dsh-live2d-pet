@@ -131,6 +131,11 @@ async function list() {
 async function buildOne(id, options) {
   const character = options.manifest || (await characterById(id))
   if (character === null) throw new Error(`unknown character: ${id}`)
+  if (character.kind === 'atlas') {
+    // Frame-atlas characters are prepared by their own fetch script; the matte
+    // pipeline has nothing to do for them.
+    return { id, skipped: 'atlas', dir: character.dir }
+  }
   const dir = character.dir
   const sourceName = character.source || (await exists(join(dir, 'source.png')) ? 'source.png' : 'source.jpg')
   const sourcePath = join(dir, sourceName)
@@ -300,6 +305,10 @@ async function build() {
   if (targets.length === 0) throw new Error('no characters to build')
   for (const id of targets) {
     const result = await buildOne(id, { rerig: has('rerig') })
+    if (result.skipped === 'atlas') {
+      console.log(`\n${id}\n  atlas    prepared by scripts/fetch-*.mjs — nothing to do here`)
+      continue
+    }
     report(result)
   }
 }

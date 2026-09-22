@@ -56,8 +56,12 @@ async function fetchCharacter(id) {
     id: payload.manifest.id,
     name: payload.manifest.name,
     rig: payload.rig,
-    sprite: `data:image/png;base64,${payload.sprite}`,
+    sprite: payload.sprite ? `data:image/png;base64,${payload.sprite}` : null,
     blinkSprite: payload.spriteBlink ? `data:image/png;base64,${payload.spriteBlink}` : null,
+    atlas: payload.atlas ? `data:image/png;base64,${payload.atlas}` : null,
+    grid: payload.grid,
+    animations: payload.animations,
+    moodMap: payload.moodMap,
   }
 }
 
@@ -139,6 +143,15 @@ export function apply(ctx) {
     const canvasRef = React.useRef(null)
     const characterRef = React.useRef(null)
     const dragRef = React.useRef(null)
+    const rootRef = React.useRef(null)
+    const panelRef = React.useRef(null)
+    /**
+     * Where the bubble can actually go. It used to open upward and centre on
+     * the pet unconditionally, so parking the pet near the top edge put the
+     * whole panel above the viewport — the pet looked unresponsive because its
+     * controls had opened somewhere the user could not see.
+     */
+    const [place, setPlace] = React.useState(null)
 
     // Keep a valid target without clobbering an explicit choice.
     React.useEffect(() => {
@@ -184,6 +197,10 @@ export function apply(ctx) {
         rig: character.rig,
         sprite: character.sprite,
         blinkSprite: character.blinkSprite,
+        atlas: character.atlas,
+        grid: character.grid,
+        animations: character.animations,
+        moodMap: character.moodMap,
       })
       characterRef.current = renderer
       return () => {
@@ -191,6 +208,64 @@ export function apply(ctx) {
         characterRef.current = null
       }
     }, [character])
+
+    React.useEffect(() => {
+      if (!open) return undefined
+      /**
+       * Place the bubble by explicit coordinates.
+       *
+       * CSS alone cannot do this: the panel has to open upward when there is
+       * room, downward when there is not, and be clamped when the window is
+       * shorter than the panel plus the pet — the case where "flip to the other
+       * side" still runs off the screen.
+       */
+      const measure = () => {
+        const root = rootRef.current
+        const panel = panelRef.current
+        if (!root || !panel) return
+        const rect = root.getBoundingClientRect()
+        const width = panel.offsetWidth || 286
+        const height = panel.offsetHeight || 260
+        const margin = 8
+        const gap = 10
+        const roomAbove = rect.top - gap - margin
+        const roomBelow = window.innerHeight - rect.bottom - gap - margin
+        let top
+        if (roomAbove >= height) top = rect.top - gap - height
+        else if (roomBelow >= height) top = rect.bottom + gap
+        else if (roomAbove >= roomBelow) top = margin
+        else top = window.innerHeight - margin - height
+        top = Math.max(margin, Math.min(top, window.innerHeight - margin - height))
+
+        const centre = rect.left + rect.width / 2
+        let left = centre - width / 2
+        left = Math.max(margin, Math.min(left, window.innerWidth - margin - width))
+
+        setPlace({ left: Math.round(left), top: Math.round(top) })
+      }
+      // The panel must exist before it can be measured: this runs once after
+      // the open render, then on every viewport change.
+      measure()
+      window.addEventListener('resize', measure)
+      return () => window.removeEventListener('resize', measure)
+    }, [open, pos])
+
+    // A window that shrank can leave the pet outside it; pull it back.
+    React.useEffect(() => {
+      const clamp = () => {
+        setPos((current) => {
+          if (current === null) return current
+          const size = rootRef.current ? rootRef.current.getBoundingClientRect() : { width: 124, height: 200 }
+          const margin = 24
+          return {
+            x: Math.max(margin - size.width, Math.min(window.innerWidth - margin, current.x)),
+            y: Math.max(margin - size.height, Math.min(window.innerHeight - margin, current.y)),
+          }
+        })
+      }
+      window.addEventListener('resize', clamp)
+      return () => window.removeEventListener('resize', clamp)
+    }, [])
 
     const running = runningId !== '' && runningId === target
     const anyRunning = runningId !== ''
@@ -261,26 +336,41 @@ export function apply(ctx) {
 
     const onPointerDown = (event) => {
       const el = event.currentTarget
-      if (el.setPointerCapture) el.setPointerCapture(event.pointerId)
-      dragRef.current = { sx: event.clientX, sy: event.clientY, moved: false, fresh: pos === null }
+      try {
+        el.setPointerCapture(event.pointerId)
+      } catch {
+        /* a synthetic pointer carries no capturable id */
+      }
+      // Anchor the drag to the element's *current* box, every time. Anchoring
+      // only on the first drag (when `pos` was still null) left the second drag
+      // with an undefined origin, so `origin + delta` was NaN and the pet would
+      // not move again.
+      const root = el.parentElement || el
+      const rect = root.getBoundingClientRect()
+      dragRef.current = {
+        sx: event.clientX,
+        sy: event.clientY,
+        ox: rect.left,
+        oy: rect.top,
+        width: rect.width,
+        height: rect.height,
+        moved: false,
+      }
     }
     const onPointerMove = (event) => {
       const state = dragRef.current
       if (!state) return
       const dx = event.clientX - state.sx
       const dy = event.clientY - state.sy
-      if (!state.moved && Math.abs(dx) + Math.abs(dy) > 4) {
-        state.moved = true
-        if (state.fresh) {
-          const rect = event.currentTarget.getBoundingClientRect()
-          state.ox = rect.left
-          state.oy = rect.top
-        }
-      }
+      if (!state.moved && Math.abs(dx) + Math.abs(dy) > 4) state.moved = true
       if (!state.moved) return
+      // Keep a grabbable sliver on screen rather than clamping to a fixed 60px.
+      const margin = 24
+      const minX = margin - state.width
+      const minY = margin - state.height
       setPos({
-        x: Math.max(4, Math.min(window.innerWidth - 60, state.ox + dx)),
-        y: Math.max(4, Math.min(window.innerHeight - 60, state.oy + dy)),
+        x: Math.max(minX, Math.min(window.innerWidth - margin, state.ox + dx)),
+        y: Math.max(minY, Math.min(window.innerHeight - margin, state.oy + dy)),
       })
     }
     const onPointerUp = () => {
@@ -338,7 +428,15 @@ export function apply(ctx) {
           }, entry.name + (entry.builtin ? '' : ' · 自定')))))
       : null
 
-    const panel = React.createElement('div', { className: 'dshl2d-panel' },
+    const panel = React.createElement('div', {
+      ref: panelRef,
+      className: 'dshl2d-panel',
+      // Rendered at the measured spot; the first frame before measurement uses
+      // the CSS default and is corrected on the next one.
+      style: place === null
+        ? { visibility: 'hidden' }
+        : { left: `${place.left}px`, top: `${place.top}px` },
+    },
       header,
       characterRow,
       React.createElement('textarea', {
@@ -376,7 +474,7 @@ export function apply(ctx) {
       note ? React.createElement('div', { className: `dshl2d-msg is-${note.kind}` }, note.text) : null,
     )
 
-    return React.createElement('div', { className: 'dshl2d-root', style },
+    return React.createElement('div', { className: 'dshl2d-root', style, ref: rootRef },
       React.createElement('div', {
         className: 'dshl2d-pet',
         onPointerDown,

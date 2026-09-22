@@ -268,14 +268,28 @@ export function apply(ctx, config) {
 
   // ---- character registry -------------------------------------------------
 
-  /** Plain JSON only: the manifest's leaf fields, never a live object. */
+  /**
+   * The public face of a character: plain leaf fields only, never a live
+   * object. One mapper for every consumer — an index that advertises different
+   * fields than the per-character payload is how `hasBlinkFrame` went missing.
+   */
+  function publicManifest(character) {
+    return {
+      id: character.id,
+      name: character.name,
+      description: character.description,
+      author: character.author,
+      license: character.license,
+      builtin: character.builtin === true,
+      hasBlinkFrame: character.petBlink !== null && character.petBlink !== undefined,
+    }
+  }
+
   async function characterIndex() {
     const characters = await listCharacters()
     return {
       ok: true,
-      characters: characters.map(({ id, name, description, author, license, builtin }) => ({
-        id, name, description, author, license, builtin: builtin === true,
-      })),
+      characters: characters.map(publicManifest),
       userRoot: userCharacterRoot(),
     }
   }
@@ -289,6 +303,10 @@ export function apply(ctx, config) {
       rig: character.rig,
       sprite: character.sprite,
       spriteBlink: character.spriteBlink,
+      atlas: character.atlas,
+      grid: character.grid,
+      animations: character.animations,
+      moodMap: character.moodMap,
     }
   }
 
@@ -306,9 +324,14 @@ export function apply(ctx, config) {
   // its own origin — so the same two routes are also published on the harness's
   // own web carrier. Same-origin, loopback-bound, and serving nothing but
   // character art, which ships publicly in this package anyway.
-  const webServer = ctx.get('webServer')
-  if (webServer !== undefined) {
-    ctx.effect(() => webServer.register({
+  // `ctx.inject` waits for the service to appear; `ctx.get` does not. Reading it
+  // once at apply time silently registered nothing, because the plugin can load
+  // before the web carrier has activated — the route then 404'd forever and the
+  // in-page pet quietly fell back to its bundled character. Injection is also
+  // the right shape here: a profile without a web carrier simply never runs this
+  // callback, and the desktop bridge is unaffected.
+  ctx.inject(['webServer'], (scoped) => {
+    scoped.effect(() => scoped.webServer.register({
       kind: 'prefix',
       path: CHARACTER_ROUTE,
       handler: async (req, res) => {
@@ -326,7 +349,8 @@ export function apply(ctx, config) {
         }
       },
     }), 'live2d-pet: character route')
-  }
+    console.log(`[dsh-live2d-pet] characters served at ${CHARACTER_ROUTE}`)
+  })
 
   // ---- the bridge itself -------------------------------------------------
 

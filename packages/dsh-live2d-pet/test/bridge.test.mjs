@@ -24,10 +24,14 @@ import { fileURLToPath } from 'node:url'
 const HERE = dirname(fileURLToPath(import.meta.url))
 const PLUGIN = join(HERE, '..', 'lib', 'index.js')
 
-/** Never touch a real harness home unless the caller asks for one. */
-if (process.env.DSH_HOME === undefined) {
-  process.env.DSH_HOME = await mkdtemp(join(tmpdir(), 'dsh-pet-test-'))
-}
+/**
+ * Always work in a throwaway home. Inheriting `DSH_HOME` would point this test
+ * at the developer's real harness — it removes and rewrites `bridge.json`
+ * there, which would pull the discovery file out from under a running shell.
+ * `PET_TEST_HOME` is the explicit opt-in for debugging against a real one.
+ */
+process.env.DSH_HOME = process.env.PET_TEST_HOME
+  ?? await mkdtemp(join(tmpdir(), 'dsh-pet-test-'))
 const HOME = process.env.DSH_HOME
 const DISCOVERY = join(HOME, 'live2d-pet', 'bridge.json')
 
@@ -64,6 +68,17 @@ const ctx = {
     const dispose = factory()
     disposers.push(dispose)
     return dispose
+  },
+  /**
+   * Cordis runs the callback only once every named service is present. The mock
+   * knows one service, so a `webServer` injection never fires — which is exactly
+   * the profile-without-a-web-carrier case that must stay harmless.
+   */
+  inject(deps, callback) {
+    const names = Array.isArray(deps) ? deps : Object.keys(deps)
+    if (!names.every((name) => name === 'sessionController')) return () => {}
+    callback(this)
+    return () => {}
   },
 }
 
@@ -216,6 +231,15 @@ check('the character sprite is real bytes', typeof whaleMaid.sprite === 'string'
 check('the rig names the motions the renderer drives',
   whaleMaid.rig.influences.some((inf) => inf.motion === 'blink')
   && whaleMaid.rig.influences.some((inf) => inf.motion === 'talk'))
+
+const gugu = await (await fetch(`${base}/v1/characters/gugu`, { headers: auth })).json()
+check('the atlas character loads with its playback spec',
+  gugu.ok === true && gugu.manifest.kind === 'atlas'
+  && typeof gugu.atlas === 'string' && gugu.atlas.length > 10000
+  && gugu.animations.idle && gugu.animations.sleep && gugu.grid.cellWidth === 192,
+  gugu.ok ? `kind=${gugu.manifest.kind} atlas=${Math.round((gugu.atlas || '').length / 1024)}KB` : '')
+check('an atlas character carries no mesh rig',
+  gugu.ok && gugu.rig === null && gugu.sprite === null)
 
 const missing = await fetch(`${base}/v1/characters/does-not-exist`, { headers: auth })
 check('an unknown character 404s', missing.status === 404, `status=${missing.status}`)

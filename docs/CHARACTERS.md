@@ -5,9 +5,28 @@
 | | | |
 |---|---|---|
 | <img src="images/character-whale-maid.png" width="150" /> | **DeepSeek 鲸鱼娘** | 蓝紫渐变长发、鲸鳍耳、鲸尾的女仆装 Q 版角色。默认角色，带睁眼/闭眼配对帧 |
-| <img src="images/character-penguin.png" width="150" /> | **企鹅 Pip** | 本项目原创的 Q 版企鹅，大头、奶油色脸腹、薄荷围巾 |
+| <img src="images/character-gugu.png" width="150" /> | **咕咕嘎嘎** | 帧动画角色（Codex 图集）。权利状态见 [`PROVENANCE.md`](../resources/characters/gugu/PROVENANCE.md) |
 
-两个都是同一条流水线的产物，也都能在插件和外壳里随时切换。
+鲸鱼娘走**网格形变**流水线，咕咕嘎嘎是**帧动画**后端——两种角色形态，同一条加载通路，界面无感切换。
+
+## 帧动画（图集）角色
+
+有些角色是 Codex 风格的序列帧图集（一格里一行一个动作），直接播放比形变更合适。这类角色由各自的抓取脚本准备：
+
+```json
+{
+  "kind": "atlas",
+  "atlas": "atlas.png",
+  "grid": { "cols": 9, "rows": 8, "cellWidth": 192, "cellHeight": 208 },
+  "animations": { "idle": { "row": 0, "frames": 7, "fps": 4 }, "...": {} },
+  "moodMap": { "thinking": "working", "...": {} }
+}
+```
+
+- 帧动画以**原始分辨率**使用：桌宠显示宽度 124px，192px 的帧就是原生分辨率，不是放大；
+- 行序没有机器可读标签，映射来自上游 README 描述 + 逐行运动特征分析——如果哪个动作和状态对不上，改 `animations` 里的行号重建即可；
+- 命中检测用待机行第一帧的轮廓做蒙版；
+- 打盹、戳一下、思考 `…`、搁置 `?` 等行为层对两种后端同样生效。
 
 ## 换成别的角色
 
@@ -44,7 +63,7 @@ my-character
 
 **去看那张叠图。** 它是唯一能告诉你形变区域落在哪的东西：
 
-<img src="images/character-penguin.png" width="120" />
+<img src="images/character-gugu.png" width="120" />
 
 （叠图长这样：每个椭圆是一个形变区域，标注了名字。图在角色目录里。）
 
@@ -126,6 +145,4 @@ resources/characters/<id>/
 
 ## 关于内置角色的来源
 
-企鹅 Pip 是为本项目**原创设计**的（`scripts/make-penguin-art.mjs` 可复现），不是任何已有迷因或品牌角色的复制。这一点是刻意的：项目以 MIT 分发，混入来源有争议的形象会同时带来法律问题和许可上的自相矛盾。
-
-鲸鱼娘来自项目使用者的原画，随仓库分发。
+「咕咕嘎嘎」的来源与此相反：它是一个**权利状态混乱**的社区迷因形象（底层 IP、B 站创作者、字节跳动三方主张并存），本项目按所有者决定使用它，并把事实完整记录在 [`PROVENANCE.md`](../resources/characters/gugu/PROVENANCE.md) 里——不主张任何权利，也不暗示任何背书。分发时请保留该文件。

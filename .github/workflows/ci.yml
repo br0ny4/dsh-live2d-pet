@@ -34,6 +34,12 @@ jobs:
       - name: Host bridge tests
         run: pnpm test:bridge
 
+      # Boots a real harness. Skips itself when `dsh` is not on PATH, which is
+      # the case on a stock runner, so it does not fail CI — it exists to be run
+      # on a machine that has the harness.
+      - name: Harness integration tests
+        run: pnpm test:harness
+
       # Structural validation of the shipped .moc3 model family.
       - name: Model tests
         run: pnpm test:model

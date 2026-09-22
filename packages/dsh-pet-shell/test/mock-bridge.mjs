@@ -91,7 +91,17 @@ const server = createServer((req, res) => {
       (character) => res.writeHead(200, { 'content-type': 'application/json' })
         .end(JSON.stringify(character === null
           ? { ok: false, error: `unknown character: ${id}` }
-          : { ok: true, manifest: character.manifest, rig: character.rig, sprite: character.sprite })),
+          : {
+            ok: true,
+            manifest: character.manifest,
+            rig: character.rig,
+            sprite: character.sprite,
+            spriteBlink: character.spriteBlink,
+            atlas: character.atlas,
+            grid: character.grid,
+            animations: character.animations,
+            moodMap: character.moodMap,
+          })),
       (error) => res.writeHead(200).end(JSON.stringify({ ok: false, error: String(error.message) })),
     )
     return

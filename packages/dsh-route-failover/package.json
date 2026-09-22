@@ -1,0 +1,23 @@
+{
+  "name": "dsh-route-failover",
+  "version": "0.1.0",
+  "description": "DeepSeek Harness 插件：api.deepseek.com 连续 TRANSPORT 失败时自动把会话切到备用模型路由，主路由恢复后自动切回。",
+  "keywords": ["dsh", "dsh-plugin", "deepseek-harness", "failover", "network"],
+  "license": "MIT",
+  "author": "br0ny4",
+  "homepage": "https://github.com/br0ny4/dsh-live2d-pet#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/br0ny4/dsh-live2d-pet.git",
+    "directory": "packages/dsh-route-failover"
+  },
+  "bugs": { "url": "https://github.com/br0ny4/dsh-live2d-pet/issues" },
+  "type": "module",
+  "main": "lib/index.js",
+  "files": ["lib", "README.md"],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  }
+}

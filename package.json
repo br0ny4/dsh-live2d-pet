@@ -8,7 +8,7 @@
   "type": "module",
   "scripts": {
     "build": "pnpm --filter dsh-live2d-pet build && pnpm --filter dsh-pet-shell build",
-    "test": "pnpm test:bridge && pnpm test:shell && pnpm test:model",
+    "test": "pnpm test:bridge && pnpm test:harness && pnpm test:shell && pnpm test:model && pnpm test:failover",
     "test:bridge": "node packages/dsh-live2d-pet/test/bridge.test.mjs",
     "test:shell": "node packages/dsh-pet-shell/test/smoke.mjs",
     "test:model": "node live2d-pipeline/tools/verify.mjs",
@@ -18,12 +18,16 @@
     "characters": "node scripts/character.mjs list",
     "characters:build": "node scripts/character.mjs build",
     "characters:rerig": "node scripts/character.mjs build --rerig",
-    "assets:whale-maid": "node scripts/fetch-whale-maid-art.mjs"
+    "assets:whale-maid": "node scripts/fetch-whale-maid-art.mjs",
+    "test:harness": "node packages/dsh-live2d-pet/test/harness.test.mjs",
+    "test:failover": "node packages/dsh-route-failover/test/failover.test.mjs",
+    "assets:gugu": "node scripts/fetch-gugu-assets.mjs"
   },
   "devDependencies": {
     "ag-psd": "^31.0.2",
     "sharp": "^0.35.4",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "undici": "^8.10.2"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
