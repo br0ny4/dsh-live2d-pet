@@ -12,6 +12,16 @@
     "web-ui"
   ],
   "license": "MIT",
+  "author": "br0ny4",
+  "homepage": "https://github.com/br0ny4/dsh-live2d-pet#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/br0ny4/dsh-live2d-pet.git",
+    "directory": "packages/dsh-live2d-pet"
+  },
+  "bugs": {
+    "url": "https://github.com/br0ny4/dsh-live2d-pet/issues"
+  },
   "type": "module",
   "main": "lib/index.js",
   "exports": {
@@ -28,6 +38,9 @@
     "README.md",
     "LICENSE"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "node build.mjs",
     "prepare": "node build.mjs"

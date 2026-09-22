@@ -11,7 +11,7 @@
 - **页面内桌宠（客户端半边）** —— 注册进 `shell.overlay` 插槽，浮在 harness 窗口里。装上就能用，本节以下都在讲它。
 - **系统全局桌宠（Host 半边 + 外壳）** —— 浏览器页面的物理边界就是页面本身，无论怎么注册插槽都出不了窗口。所以 Host 半边会开一个**仅回环、带随机密钥**的本地桥，把会话状态实时推出去；配套的 Electron 外壳 [`dsh-pet-shell`](../dsh-pet-shell/) 用透明置顶窗口把同一只角色画到系统桌面上。
 
-两条路共用同一个角色引擎，所以是同一只角色。桥的协议与安全边界见仓库根 README。
+两条路共用同一个角色引擎，所以是同一只角色。桥的协议规格与安全边界见 [`docs/ARCHITECTURE.md`](../../docs/ARCHITECTURE.md)。
 
 ## 它长什么样
 
@@ -23,6 +23,15 @@
 - 角色会**用眼睛跟着鼠标**
 
 ## 安装
+
+从仓库本地安装（当前方式）：
+
+```bash
+pnpm build
+dsh plugin --profile web add ./packages/dsh-live2d-pet
+```
+
+发布到 npm 之后可以直接按包名安装：
 
 ```bash
 dsh plugin --profile web add dsh-live2d-pet
@@ -36,7 +45,7 @@ dsh plugin --profile web remove dsh-live2d-pet
 
 ## 它是怎么工作的
 
-插件不新开端口、不起进程、不碰私有接口。它只做两件事：
+页面内这一半不新开端口、不起进程、不碰私有接口。它只做两件事：
 
 **1. 在 `shell.overlay` 插槽里注册一个悬浮层**
 

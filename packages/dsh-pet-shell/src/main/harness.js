@@ -32,7 +32,7 @@ async function findDsh(explicit) {
       }
     }
   } catch {
-    /* no dlx cache on this machine */
+    /* no pnpm dlx cache present */
   }
 
   for (const candidate of candidates) {

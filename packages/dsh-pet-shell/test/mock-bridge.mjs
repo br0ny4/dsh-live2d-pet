@@ -42,7 +42,7 @@ function snapshot() {
     sessions: [{
       id: SESSION,
       title: '桌宠联调',
-      cwd: '/Users/kiana/Downloads/code',
+      cwd: process.cwd(),
       running,
       phase,
       detail,

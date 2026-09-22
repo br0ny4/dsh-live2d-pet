@@ -13,7 +13,7 @@ See `docs/RESULTS.md` for byte sizes and the exact verification evidence, and
 ## Reproduce everything
 
 ```bash
-cd /Users/kiana/Downloads/code/dsh-pet
+cd dsh-live2d-pet
 
 # 0. one-time: extra Node dep used to write the PSD
 pnpm add -D ag-psd
@@ -174,16 +174,21 @@ every layer's *pixels*. The composite assertion guarantees that.
 
 ## Build environment notes
 
-* **JDK**: `/Library/Java/JavaVirtualMachines/jdk-21.jdk/Contents/Home` (arm64, 21.0.1).
-  The default `java` on PATH is a 23 x86_64 build — do not use it.
-* **Gradle**: the repo ships `gradlew` (Gradle 9.6.1) but the wrapper cannot download
-  its distribution here, so a standalone Gradle 9.6.1 is used from
-  `build/gradle-dist/`. `scripts/live2d-build-psd2live.sh` downloads it if missing.
-* **Dead proxy**: `~/.gradle/gradle.properties` sets `systemProp.http.proxyHost=127.0.0.1`
-  / port `7890`, which nothing is listening on — every Gradle network call fails with
-  *Connection refused*. That file is **not** modified; the build scripts neutralise it
-  per-invocation with `-Dorg.gradle.jvmargs="... -Dhttp.nonProxyHosts=* -Dhttp.proxyHost="`.
-  (`git config --global` has the same stale proxy; `curl` and a per-command
-  `git -c http.proxy=` override work fine.)
-* **Cubism Native SDK is not needed.** macOS/Linux fall back to psd2live's built-in
-  CPU rasteriser; `.moc3` export works without the proprietary SDK, as its docs state.
+* **JDK 21** is what psd2live targets. The build scripts prefer an existing
+  `JAVA_HOME` when it is already 21, and otherwise ask the platform for one
+  (`/usr/libexec/java_home -v 21` on macOS). If neither works they stop with a
+  clear message rather than silently using the wrong JDK.
+* **Gradle**: the upstream repo ships a `gradlew` wrapper, but on some networks
+  the wrapper cannot download its distribution. `scripts/live2d-build-psd2live.sh`
+  falls back to a standalone Gradle 9.6.1 fetched into `build/gradle-dist/`
+  (about 420 MB, and it is not committed).
+* **A stale proxy breaks the build.** If `~/.gradle/gradle.properties` sets
+  `systemProp.http.proxyHost` to a host or port that is not actually listening,
+  *every* Gradle network call fails with `Connection refused`, including plugin
+  and dependency resolution. The scripts clear the proxy for their own
+  invocation only and never modify that file. If you hit this, check the file
+  and either start your proxy or remove the stale entries.
+* **The Cubism Native SDK is not required.** macOS and Linux fall back to
+  psd2live's built-in CPU rasteriser, and `.moc3` export works without the
+  proprietary SDK — as psd2live's own documentation states.
+

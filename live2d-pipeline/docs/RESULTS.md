@@ -1,6 +1,6 @@
 # RESULTS — measured evidence
 
-All numbers below were produced on this machine by the scripts in `../tools/`.
+All numbers below were produced by the scripts in `../tools/` and can be reproduced with them.
 Nothing here is estimated.
 
 ---

@@ -194,7 +194,13 @@ document.addEventListener('mousemove', (event) => {
 })
 
 el.pet.addEventListener('pointerdown', (event) => {
-  el.pet.setPointerCapture(event.pointerId)
+  // A synthetic PointerEvent has no capturable pointerId; capture is an
+  // optimisation for real drags, not a requirement.
+  try {
+    el.pet.setPointerCapture(event.pointerId)
+  } catch {
+    /* not a real pointer */
+  }
   view.dragging = { x: event.screenX, y: event.screenY, moved: false }
 })
 

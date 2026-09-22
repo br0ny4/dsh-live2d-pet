@@ -90,15 +90,21 @@ side-tagged (`ArtMeshFootwearL`, `ArtMeshFootwearR`, …). No layer was lost or 
 
 ---
 
-## 4. Environment: two stale proxy configurations
+## 4. Environment: a stale proxy configuration
 
-* `~/.gradle/gradle.properties` contains
-  `systemProp.http.proxyHost=127.0.0.1` / `systemProp.http.proxyPort=7890` (and the
-  https pair). Nothing listens on 7890, so **every** Gradle network call fails with
-  `Connection refused` — including the `gradlew` distribution download and all
-  plugin/dependency resolution.
-* `git config --global` has the same `http.proxy` / `https.proxy`.
+Gradle and git both read proxy settings from user-level config, and a setting
+that points at a host or port which is **not actually listening** fails every
+network call with `Connection refused` — including the `gradlew` distribution
+download and all plugin/dependency resolution. In our case both
+`~/.gradle/gradle.properties` (`systemProp.http.proxyHost`) and
+`git config --global` (`http.proxy`) held such a setting.
 
-Neither file was modified. The build scripts neutralise the Gradle proxy
-per-invocation via `-Dorg.gradle.jvmargs="… -Dhttp.nonProxyHosts=* -Dhttp.proxyHost="`,
-and clones use `git -c http.proxy=`. Direct `curl` works throughout.
+No user config file was modified. The build scripts clear the proxy for their
+own invocation only:
+
+* Gradle: `-Dorg.gradle.jvmargs="… -Dhttp.nonProxyHosts=* -Dhttp.proxyHost="`
+* git clones: `git -c http.proxy=`
+
+Direct `curl` was unaffected throughout, which is what made the failure look
+like a Gradle problem rather than a proxy problem. **If you hit this, check both
+files before debugging anything else.**

@@ -305,6 +305,16 @@ app.whenReady().then(async () => {
   if (SHOT !== null) {
     setTimeout(async () => {
       try {
+        if (ARGS.includes('--with-panel')) {
+          // Documentation shot: toggle the bubble the way a click would.
+          await petWindow.webContents.executeJavaScript(`(() => {
+            const pet = document.getElementById('pet')
+            for (const type of ['pointerdown', 'pointerup']) {
+              pet.dispatchEvent(new PointerEvent(type, { bubbles: true, clientX: 0, clientY: 0 }))
+            }
+          })()`)
+          await new Promise((resolve) => setTimeout(resolve, 600))
+        }
         const image = await petWindow.capturePage()
         await writeFile(SHOT, image.toPNG())
         console.log(`screenshot: ${SHOT}`)

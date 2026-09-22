@@ -18,7 +18,7 @@ import { fileURLToPath } from 'node:url';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, '..');
 const OUT = join(ROOT, 'out');
-const MODEL = '/Users/kiana/Downloads/code/dsh-pet/resources/live2d/models/whale-maid';
+const MODEL = process.env.PET_MODEL || join(ROOT, '..', 'resources', 'live2d', 'models', 'whale-maid');
 const PSD = join(OUT, 'whale-maid.psd');
 
 const fail = [];

@@ -4,17 +4,9 @@
 #
 #   ./scripts/sync.sh "fix: 修掉抠图的通道步长 bug"
 #
-# Transport, because it took some digging on this machine:
-#   - The remote is SSH (`git@github.com:br0ny4/dsh-live2d-pet.git`), not HTTPS.
-#     `github.com:443` resolves to an address that times out here, and
-#     `api.github.com` stays reachable, which is exactly the combination that
-#     lets `gh` work while `git push` hangs for 75 seconds.
-#   - `~/.ssh/config` maps `Host github.com` to `ssh.github.com:443`, and the
-#     machine's `id_ed25519` is registered on the account.
-#   - This checkout also pins an empty `http.proxy` in its own `.git/config`,
-#     because the global git config points at `127.0.0.1:7890`, a proxy that is
-#     not always running. Irrelevant for SSH, harmless for HTTPS.
-#   - Never force-pushes.
+# Pushes over SSH. Retries, because connections to GitHub fail in bursts on
+# some networks and an attempt that fails usually succeeds seconds later.
+# Never force-pushes.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -32,8 +24,6 @@ else
   git commit -m "$message"
 fi
 
-# Retry: this network drops connections to GitHub in bursts, and a plain
-# `git push` that fails once usually succeeds a few seconds later.
 push() {
   if git rev-parse --abbrev-ref '@{upstream}' >/dev/null 2>&1; then
     git push
@@ -53,4 +43,3 @@ done
 
 echo "push failed after 5 attempts; the commit is local and safe" >&2
 exit 1
-

@@ -34,7 +34,7 @@ import { fileURLToPath } from 'node:url';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, '..');
-const SRC = '/Users/kiana/Downloads/code/dsh-pet/resources/character/whale-maid/character.png';
+const SRC = process.argv[2] || join(ROOT, '..', 'resources', 'character', 'whale-maid', 'character.png');
 const OUT = join(ROOT, 'out');
 const DBG = join(ROOT, 'debug');
 mkdirSync(OUT, { recursive: true });

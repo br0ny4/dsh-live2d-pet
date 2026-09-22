@@ -1,0 +1,72 @@
+# Changelog
+
+本文件记录本项目的所有重要变更。
+
+格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
+版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)，具体规则见
+[`docs/VERSIONING.md`](docs/VERSIONING.md)。
+
+## [Unreleased]
+
+### 计划中
+
+- 接入 Cubism 渲染后端，让桌宠真正加载 `resources/live2d/models/whale-maid/`
+  里的 `.moc3`（目前仍是 WebGL 网格形变）
+- 在 Cobism 渲染后端上线后，用真实的眨眼/口型/物理表现回归验证模型
+
+## [0.1.0] - 2026-09-22
+
+首个可用版本。
+
+### 新增
+
+- **插件 `dsh-live2d-pet`**
+  - 页面内桌宠：注册进 `shell.overlay` 插槽的悬浮角色，可拖动、点击弹出指令气泡
+  - 指令投递：走 `sessionController.prompt`，与浏览器输入框同一条路径，支持
+    `queue` 排队与 `steer` 插话两种模式
+  - 状态派生：订阅 `agent/status`、`session/event`、`agent/error`、
+    `api-session/*`，推出 `idle` / `thinking` / `tool` / `waiting` / `done` /
+    `error` 六种相位
+  - Host 半边：仅回环、随机密钥鉴权的本地桥（`GET /v1/state`、`GET /v1/events`
+    的 SSE 推送、`POST /v1/prompt`），发现文件写入
+    `$DSH_HOME/live2d-pet/bridge.json`（0600），随插件卸载清理
+- **外壳 `dsh-pet-shell`**
+  - 系统全局桌宠：透明、置顶、逐像素鼠标穿透的 Electron 窗口
+  - 自动选接入：检测到已有 harness 就直接接上，否则自行拉起 `dsh web --port 0`
+  - 系统托盘：连接状态、重连、开关桌宠、打开 Harness 界面
+- **角色渲染**
+  - WebGL 顶点网格形变：把单张扁平立绘当作可形变网格，按椭圆区域权重位移，
+    实现头发摆动、尾鳍扇动、呼吸、真正闭合的眨眼、说话时的口型、视线跟随
+- **资产流水线**
+  - `scripts/build-character.mjs`：三视图 → 透明立绘，两段式抠图
+    （严格白泛洪定轮廓 + 邻近光环软化），逐字节可复现
+  - `scripts/fetch-live2d-assets.mjs`：按机器抓取 Cubism Core 与 8 个官方免费样例模型
+- **模型生产流水线**（`live2d-pipeline/`）
+  - 扁平立绘 → 27 层语义分层 PSD（符合 psd2live 的 See-Through 命名规范）
+  - 构建 psd2live 并导出真 `.moc3` 模型族，含 `.model3.json`、`.cdi3.json`、
+    `physics3.json`、6 秒循环待机与眨眼/点头/摇头动作、4096² 图集、
+    可在 Cubism Editor 二次编辑的 `.cmo3`
+- **测试**：`pnpm test` 共 66 项断言
+  - Host 桥自测 34 项（发现文件、鉴权、SSE、状态派生、指令转发、卸载清理）
+  - 外壳端到端冒烟 9 项（真启 Electron 接 mock 桥，校验接入日志、画布、截图）
+  - 模型结构校验 23 项
+
+### 修复
+
+- 抠图脚本按 3 字节步长读取 4 通道缓冲，导致头发/脸/袜子被误判为背景，
+  角色整体以约 75% 不透明度渲染，呆毛被抹掉
+- WebGL 渲染的 alpha 混合用了单一 `blendFunc`，目标 alpha 变成 `srcAlpha²`，
+  半透明白色蕾丝与灰色阴影渲染成白色雾团与灰色横带
+- `session/event` 的会话身份取自事件对象，而真实契约是 `(session, event)`
+- 错误相位的详情仍显示上一条助手文本，而非错误信息
+- 外壳的接入/拉起 harness 等生命周期事件被 `--dev` 门控，生产路径下静默
+
+### 已知限制
+
+- 默认角色是网格形变而非真 Live2D 模型；`.moc3` 已产出并结构校验，但渲染后端尚未接入
+- 模型只在中性姿态下验证过像素级正确，眨眼/口型/物理未在真实渲染器里目视确认
+- PSD 的像素精确，但部分语义标签是启发式近似（头发前后、头饰、尾鳍、额头）
+- 原画没有眉毛（被刘海遮住），要做眉毛动画需先补画
+
+[Unreleased]: https://github.com/br0ny4/dsh-live2d-pet/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/br0ny4/dsh-live2d-pet/releases/tag/v0.1.0

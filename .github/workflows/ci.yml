@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+
+      # The Host bridge is a loopback HTTP server with no Electron or display
+      # dependency, so it runs anywhere.
+      - name: Host bridge tests
+        run: pnpm test:bridge
+
+      # Structural validation of the shipped .moc3 model family.
+      - name: Model tests
+        run: pnpm test:model
+
+      # NOT run here: `pnpm test:shell`. It launches a real Electron window and
+      # screenshots it, which needs a desktop session — it is a local-only test
+      # by design. Run it before releasing.

@@ -2,10 +2,9 @@
 # Build psd2live (Kotlin/JVM) from source on macOS.
 # No published macOS binary exists — Releases are Windows-only.
 #
-# Handles the two environment traps on this machine:
-#   1. ~/.gradle/gradle.properties pins a dead proxy (127.0.0.1:7890)  -> neutralised per-invocation
-#   2. the gradlew wrapper cannot download its distribution            -> standalone Gradle 9.6.1 used
-# Neither config file is modified.
+# Handles two environment traps, without modifying any user config:
+#   1. a stale proxy in ~/.gradle/gradle.properties                  -> cleared per-invocation
+#   2. a gradlew wrapper that cannot fetch its distribution          -> standalone Gradle used
 set -euo pipefail
 
 PIPE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/live2d-pipeline"
@@ -17,10 +16,24 @@ GRADLE_BIN="$GRADLE_HOME/bin/gradle"
 TARBALL_URL="https://codeload.github.com/tsunehimatoi/psd2live/tar.gz/refs/heads/master"
 GRADLE_URL="https://services.gradle.org/distributions/gradle-$GRADLE_VERSION-bin.zip"
 
-export JAVA_HOME=/Library/Java/JavaVirtualMachines/jdk-21.jdk/Contents/Home
+# psd2live targets JDK 21. Prefer an existing JAVA_HOME when it is already 21,
+# otherwise ask the platform for one, so this works on any machine.
+if [ -z "${JAVA_HOME:-}" ] || ! "$JAVA_HOME/bin/java" -version 2>&1 | grep -q 'version "21\.'; then
+  if [ -x /usr/libexec/java_home ]; then
+    JAVA_HOME="$(/usr/libexec/java_home -v 21 2>/dev/null || true)"
+  fi
+fi
+if [ -z "${JAVA_HOME:-}" ] || [ ! -x "$JAVA_HOME/bin/java" ]; then
+  echo "psd2live needs JDK 21; set JAVA_HOME to a 21 install" >&2
+  exit 1
+fi
+export JAVA_HOME
 export PATH="$JAVA_HOME/bin:$PATH"
 
 # strip the stale proxy for every JVM Gradle forks
+# A stale proxy in ~/.gradle/gradle.properties (pointing at a port nothing
+# listens on) makes every Gradle network call fail with "Connection refused".
+# The file is left untouched; the proxy is cleared for this build only.
 JVMARGS="-Xmx8g -Dfile.encoding=UTF-8 -Dhttp.nonProxyHosts=* -Dhttp.proxyHost= -Dhttps.proxyHost= -Dhttp.proxyPort= -Dhttps.proxyPort="
 
 mkdir -p "$BUILD_DIR"
