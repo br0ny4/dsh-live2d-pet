@@ -30,7 +30,8 @@ const el = {
 }
 
 const view = {
-  assets: null,
+  characters: [],
+  current: null,
   character: null,
   mask: null,
   maskWidth: 0,
@@ -44,6 +45,8 @@ const view = {
   dragging: null,
   interactive: null,
   speech: '',
+  /** Previous phase, so a transition can fire a one-shot reaction. */
+  lastPhase: null,
 }
 
 // ---------------------------------------------------------------------------
@@ -91,6 +94,9 @@ function setInteractive(next) {
 // Presentation
 // ---------------------------------------------------------------------------
 
+/** Idle phases longer than this let the character doze off. */
+const SLEEP_AFTER_MS = 120000
+
 const PHASE_TEXT = {
   idle: '待命',
   thinking: '思考中',
@@ -126,9 +132,19 @@ function render() {
   el.badge.className = `badge is-${phase}`
 
   if (view.character) {
-    view.character.setMood(MOOD_FOR_PHASE[phase] || 'idle')
+    if (view.sleeping) {
+      view.character.setMood('sleeping')
+    } else {
+      view.character.setMood(MOOD_FOR_PHASE[phase] || 'idle')
+    }
     // The mouth moves while text is actually streaming, not merely while busy.
     view.character.setTalking(phase === 'thinking' && Boolean(row && row.detail))
+    // A phase change is worth a mark: the pet reacts to finishing or failing.
+    if (phase !== view.lastPhase) {
+      if (phase === 'done') view.character.react('done')
+      else if (phase === 'error') view.character.react('error')
+      view.lastPhase = phase
+    }
   }
 
   // Speech bubble carries the newest concrete fact the harness produced.
@@ -193,6 +209,9 @@ document.addEventListener('mousemove', (event) => {
   setInteractive(overCharacter(event.clientX, event.clientY) || overPanel(event.clientX, event.clientY))
 })
 
+/** Drag bookkeeping, so the body can lag behind the window while it moves. */
+let lastDragAt = 0
+
 el.pet.addEventListener('pointerdown', (event) => {
   // A synthetic PointerEvent has no capturable pointerId; capture is an
   // optimisation for real drags, not a requirement.
@@ -224,12 +243,24 @@ el.pet.addEventListener('pointermove', (event) => {
   view.dragging.x = event.screenX
   view.dragging.y = event.screenY
   window.dshPet.moveBy(dx, dy)
+  if (view.character) {
+    const now = performance.now()
+    const dt = Math.max(8, now - lastDragAt)
+    lastDragAt = now
+    view.character.setDragging(true, (dx / dt) * 16, (dy / dt) * 16)
+  }
 })
 
 el.pet.addEventListener('pointerup', (event) => {
   const dragging = view.dragging
   view.dragging = null
+  if (view.character) view.character.setDragging(false)
   if (dragging && !dragging.moved) {
+    // A click is a poke: the character notices.
+    if (view.character) {
+      view.character.react('poke')
+      view.sleeping = false
+    }
     view.open = !view.open
     el.panel.hidden = !view.open
     setInteractive(view.open || overCharacter(event.clientX, event.clientY))
@@ -242,6 +273,29 @@ el.pet.addEventListener('pointerup', (event) => {
 
 el.pet.addEventListener('mouseleave', () => {
   if (view.character) view.character.setPointer(0.5, 0.5, false)
+})
+
+function renderCharacterOptions() {
+  const select = document.getElementById('characterSelect')
+  if (select === null) return
+  const currentId = view.current ? view.current.manifest.id : ''
+  select.innerHTML = ''
+  const list = view.characters.length > 0
+    ? view.characters
+    : (view.current ? [view.current.manifest] : [])
+  select.parentElement.hidden = list.length < 2
+  for (const entry of list) {
+    const option = document.createElement('option')
+    option.value = entry.id
+    option.textContent = entry.name + (entry.builtin ? '' : ' · 自定')
+    option.selected = entry.id === currentId
+    select.appendChild(option)
+  }
+}
+
+document.getElementById('characterSelect').addEventListener('change', async (event) => {
+  const result = await window.dshPet.setCharacter(event.target.value)
+  if (!result || !result.ok) setNote('error', `切换角色失败：${String((result && result.error) || '未知错误')}`)
 })
 
 el.session.addEventListener('change', (event) => {
@@ -301,19 +355,39 @@ for (const command of QUICK_COMMANDS) {
 // Wiring
 // ---------------------------------------------------------------------------
 
-window.dshPet.onAssets((assets) => {
-  view.assets = assets
+window.dshPet.onCharacters((characters) => {
+  view.characters = Array.isArray(characters) ? characters : []
+  renderCharacterOptions()
+})
+
+window.dshPet.onCharacter((character) => {
+  view.current = character
   const image = new Image()
   image.onload = () => {
+    // The hit mask follows the sprite: the window's interactive shape is
+    // whatever the new character's silhouette is.
     buildMask(image)
-    view.character = createCharacter(el.canvas, { rig: assets.rig, sprite: assets.sprite })
+    if (view.character) view.character.dispose()
+    view.character = createCharacter(el.canvas, { rig: character.rig, sprite: character.sprite })
     render()
   }
-  image.src = assets.sprite
+  image.src = character.sprite
+  renderCharacterOptions()
 })
 
 window.dshPet.onState((state) => {
   view.state = state
+  const row = (state.sessions || []).find((entry) => entry.id === state.focus) || (state.sessions || [])[0]
+  const busy = Boolean(row && row.running)
+  const changedAt = state.at || Date.now()
+  if (busy) {
+    view.sleeping = false
+    view.idleSince = changedAt
+  } else if (view.idleSince === undefined) {
+    view.idleSince = changedAt
+  } else if (changedAt - view.idleSince > SLEEP_AFTER_MS) {
+    view.sleeping = true
+  }
   render()
 })
 

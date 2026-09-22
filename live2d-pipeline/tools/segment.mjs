@@ -1,7 +1,7 @@
 /**
  * whale-maid → psd2live-compliant layered PSD
  * ============================================
- * Input : resources/character/whale-maid/character.png  (484x853 RGBA)
+ * Input : resources/characters/whale-maid/character.png  (484x853 RGBA)
  * Output: live2d-pipeline/out/whale-maid.psd  (+ per-layer PNGs + previews)
  *
  * WHY THIS SCRIPT EXISTS IN THIS SHAPE
@@ -34,7 +34,7 @@ import { fileURLToPath } from 'node:url';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, '..');
-const SRC = process.argv[2] || join(ROOT, '..', 'resources', 'character', 'whale-maid', 'character.png');
+const SRC = process.argv[2] || join(ROOT, '..', 'resources', 'characters', 'whale-maid', 'character.png');
 const OUT = join(ROOT, 'out');
 const DBG = join(ROOT, 'debug');
 mkdirSync(OUT, { recursive: true });

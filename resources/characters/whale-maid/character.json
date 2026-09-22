@@ -1,0 +1,14 @@
+{
+  "id": "whale-maid",
+  "name": "DeepSeek 鲸鱼娘",
+  "description": "蓝发、鲸尾鳍耳的女仆装 Q 版角色，本项目的默认角色。",
+  "author": "项目原画",
+  "license": "见仓库 LICENSE",
+  "builtin": true,
+  "order": 10,
+  "source": "source.jpg",
+  "sprite": "character.png",
+  "pet": "character-pet.png",
+  "rig": "puppet.json",
+  "panel": 0
+}

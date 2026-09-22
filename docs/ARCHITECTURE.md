@@ -119,21 +119,55 @@
 - 下指令走 `sessionController.prompt`，与浏览器输入框同一条路径；
 - 全部生命周期挂在 Cordis fiber 上，插件卸载即关闭服务并删除发现文件。
 
+## 角色注册表
+
+角色是「一个目录 + 一份 `character.json`」。三个根按顺序查找，先命中的赢，所以把同 id 的角色放进用户目录就能覆盖内置的：
+
+1. `$DSH_HOME/live2d-pet/characters` —— 用户导入的
+2. `<插件包>/characters` —— 随包分发的内置角色（构建时从 `resources/characters` 拷入）
+3. `<仓库>/resources/characters` —— 开发时（link 安装）的兜底
+
+两个宿主读的是同一份注册表，但通路不同，因为**浏览器页面只能请求自己的源**，够不到桌宠外壳用的回环桥：
+
+| 宿主 | 通路 | 鉴权 |
+|---|---|---|
+| 页面内桌宠 | `webServer.register({kind:'prefix'})` 挂到 `/dsh-live2d-pet/characters` | 同源，浏览器已有会话 |
+| 系统全局桌宠 | 回环桥 `/v1/characters[/<id>]` | bearer 随机密钥 |
+
+两条都返回 `{ manifest, rig, sprite(base64) }`。同源路由只暴露角色素材——这些素材本来就在包里公开分发——因此不需要额外的授权层；它绑在回环地址上，作用域仅限本机。
+
 ## 渲染
 
-默认角色是一张扁平立绘（从三视图裁出的正面），没有分层 PSD，也就没有 Cubism 模型。渲染器把它当作可形变网格：`resources/character/whale-maid/puppet.json` 用椭圆区域标出头发、呆毛、鲸尾鳍、裙摆、躯干、双眼、嘴巴，每个网格顶点按覆盖它的区域权重位移。
+角色是一张扁平立绘（从三视图裁出的正面），没有分层 PSD，也就没有 Cubism 模型。渲染器把它当作可形变网格：骨架 `puppet.json` 用椭圆区域标出头发、呆毛、鳍、裙摆、躯干、双眼、嘴，每个网格顶点按覆盖它的区域权重位移。
 
 **为什么是 WebGL 而不是多次 `drawImage`**：逐格 2D blit 会让每个格子独立重采样，相邻格永远对不齐，整张图会浮出一层网格缝。当时把过绘量从 1px 加到 3px 反而让缝更明显，因为根因不是缝隙而是重采样。一张纹理网格天然在格子边界连续。
 
 **为什么必须预乘 alpha**：`blendFunc(SRC_ALPHA, ONE_MINUS_SRC_ALPHA)` 会把 alpha 也二次相乘（`dstA = srcA²`），半透明的白色蕾丝和灰色阴影会变成白色雾团与灰色横带。正确做法是着色器里预乘、配合 `blendFuncSeparate(ONE, ONE_MINUS_SRC_ALPHA, ONE, ONE_MINUS_SRC_ALPHA)`。
 
-渲染后端只需要满足四个方法，换后端不用动 UI：
+### 行为层
+
+形变之上还有一层「什么时候动」的调度——表现力主要来自时机，而不是幅度：
+
+| 状态 | 来源 | 表现 |
+|---|---|---|
+| 情绪 | 会话相位 | 思考 / 执行 / 搁置 / 完成 / 报错各有体态 |
+| 打盹 | 待命超过 `sleepAfterMs`（默认 120s） | 闭眼、呼吸减到 0.22 倍、飘 `z` |
+| 戳 | 点击（非拖动） | 起跳 + 感叹号，并唤醒 |
+| 拖动 | 窗口移动速度 | 摆动区域按 `(1 - v)` 权重滞后，松开后按 0.86 衰减 |
+| 视线 | 光标，或无人时的随机目标 | 眼睛跟随；闲置时每 1.8–5s 换一个注视点 |
+
+徽记（`z`、感叹号、星、汗滴）画在一张**独立的覆盖画布**上：拥有 WebGL 上下文的 canvas 永远拿不到 2D 上下文，早期把它们画在主画布上的代码每帧抛异常却看不出异常——现在渲染进程的任何错误都会让冒烟测试失败。
+
+渲染后端只需要满足这几个方法，换后端不用动 UI：
 
 ```js
 createCharacter(canvas, { rig, sprite }) -> {
-  setMood(mood), setTalking(bool), setPointer(x, y, active), dispose()
+  setMood(mood), setTalking(bool), setPointer(x, y, active),
+  react(kind), setDragging(active, vx, vy), setSleepAfter(ms), dispose()
 }
 ```
+
+骨架是自动推导的（`scripts/lib/rig.mjs`）：轮廓包围盒 → 头部色带内用**自适应阈值**（最暗的 12%，而不是固定亮度，否则换一种画风就失效）找成对的深色团块当眼睛 → 暖色团块当喙/嘴 → 其余按比例。推导不出来会退回比例估算并在报告里说明。角色目录里的 `rig.overrides.json` 可以按名字替换任意区域。
 
 真 Live2D 模型仍然是更好的答案，`.moc3` 已经产出（见 `live2d-pipeline/`），接入 Cubism 后端是下一步。
 

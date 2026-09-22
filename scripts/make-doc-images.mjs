@@ -7,11 +7,13 @@
  * exactly what we want — drop it on any backdrop and it looks like it is
  * floating on a desktop.
  *
- * Capture a fresh raw shot first:
+ * Capture fresh raw shots first:
  *
  *   DSH_HOME=$(mktemp -d) node packages/dsh-pet-shell/test/mock-bridge.mjs &
- *   DSH_HOME=<that dir> npx electron packages/dsh-pet-shell \
- *     --attach-only --with-panel --screenshot docs/images/pet-panel-raw.png
+ *   DSH_HOME=<that dir> npx electron packages/dsh-pet-shell --attach-only \
+ *     --with-panel --screenshot docs/images/pet-panel-raw.png
+ *   DSH_HOME=<that dir> npx electron packages/dsh-pet-shell --attach-only \
+ *     --character penguin --with-panel --screenshot docs/images/pet-penguin-raw.png
  *
  * Then:
  *
@@ -25,6 +27,7 @@ import sharp from 'sharp'
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 const IMAGES = join(ROOT, 'docs', 'images')
 const RAW = join(IMAGES, 'pet-panel-raw.png')
+const RAW_PENGUIN = join(IMAGES, 'pet-penguin-raw.png')
 
 const WIDTH = 680
 const HEIGHT = 1120
@@ -55,34 +58,37 @@ function backdrop() {
 }
 
 async function main() {
-  let raw
-  try {
-    raw = await readFile(RAW)
-  } catch {
-    console.error(`missing ${RAW}\nCapture one first — see the header of this script.`)
-    process.exitCode = 1
-    return
+  /** Compose one raw capture onto the backdrop; a missing capture is not fatal. */
+  async function compose(rawPath, outputName) {
+    let raw
+    try {
+      raw = await readFile(rawPath)
+    } catch {
+      console.log(`docs/images/${outputName} skipped (no raw capture at ${rawPath})`)
+      return
+    }
+    const composed = await sharp(backdrop())
+      .composite([{ input: raw, top: 0, left: 0 }])
+      .png({ compressionLevel: 9 })
+      .toBuffer()
+    await writeFile(join(IMAGES, outputName), composed)
+    console.log(`docs/images/${outputName} (${(composed.length / 1024).toFixed(0)} KB)`)
+    await rm(rawPath, { force: true })
+    await rm(rawPath.replace(/\.png$/, '.nofilter.png'), { force: true })
   }
 
-  const composed = await sharp(backdrop())
-    .composite([{ input: raw, top: 0, left: 0 }])
-    .png({ compressionLevel: 9 })
-    .toBuffer()
-
-  await writeFile(join(IMAGES, 'pet-panel.png'), composed)
-  console.log(`docs/images/pet-panel.png (${(composed.length / 1024).toFixed(0)} KB)`)
+  await compose(RAW, 'pet-panel.png')
+  await compose(RAW_PENGUIN, 'pet-penguin.png')
 
   // Just the character, for the section about the renderer.
-  const character = await sharp(join(ROOT, 'resources', 'character', 'whale-maid', 'character.png'))
-    .resize({ width: 300 })
-    .png({ compressionLevel: 9 })
-    .toBuffer()
-  await writeFile(join(IMAGES, 'character.png'), character)
-  console.log(`docs/images/character.png (${(character.length / 1024).toFixed(0)} KB)`)
-
-  // The raw capture and its diagnostic sibling are working files, not docs.
-  await rm(RAW, { force: true })
-  await rm(RAW.replace(/\.png$/, '.nofilter.png'), { force: true })
+  for (const id of ['whale-maid', 'penguin']) {
+    const character = await sharp(join(ROOT, 'resources', 'characters', id, 'character.png'))
+      .resize({ width: 300 })
+      .png({ compressionLevel: 9 })
+      .toBuffer()
+    await writeFile(join(IMAGES, `character-${id}.png`), character)
+    console.log(`docs/images/character-${id}.png (${(character.length / 1024).toFixed(0)} KB)`)
+  }
 }
 
 await main()

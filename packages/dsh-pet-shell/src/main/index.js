@@ -14,10 +14,9 @@
  */
 import { app, BrowserWindow, Tray, Menu, ipcMain, nativeImage, screen, shell as electronShell } from 'electron'
 import { readFile, writeFile } from 'node:fs/promises'
-import { existsSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { readDiscovery, probe, fetchState, sendPrompt, follow } from './bridge.js'
+import { readDiscovery, probe, fetchState, fetchCharacters, fetchCharacter, sendPrompt, follow } from './bridge.js'
 import { startHarness } from './harness.js'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
@@ -30,6 +29,8 @@ const OPTIONS = {
   dshPath: argValue('dsh'),
   profile: argValue('profile') || 'web',
   attachOnly: ARGS.includes('--attach-only'),
+  /** Start on this character instead of the remembered one. */
+  character: argValue('character'),
 }
 
 /** Dev affordance: render the window to a PNG so the pet can be eyeballed headlessly. */
@@ -45,6 +46,10 @@ let connectTimer = null
 let ownedHarness = null
 let status = { mode: 'starting', detail: '正在寻找 harness…', attachedPid: null, url: null }
 let lastState = null
+/** Character selection, persisted beside the app's other state. */
+let characterId = null
+let characters = []
+const characterFile = () => join(app.getPath('userData'), 'character.json')
 
 function log(message) {
   if (ARGS.includes('--dev')) console.log(`[shell] ${message}`)
@@ -63,27 +68,58 @@ function notice(message) {
 // Assets: the same rig and sprite the in-page plugin renders.
 // ---------------------------------------------------------------------------
 
-function assetPath(name) {
-  const packaged = join(process.resourcesPath || '', 'assets', name)
-  if (existsSync(packaged)) return packaged
-  // Dev: the workspace's shared character resources.
-  return join(HERE, '..', '..', '..', '..', 'resources', 'character', 'whale-maid', name)
+async function readPreferredCharacter() {
+  try {
+    const saved = JSON.parse(await readFile(characterFile(), 'utf8'))
+    return typeof saved.id === 'string' ? saved.id : null
+  } catch {
+    return null
+  }
 }
 
-async function loadAssets() {
-  const sprite = await readFile(assetPath('character-pet.png'))
-  const rig = await readFile(assetPath('puppet.json'), 'utf8')
-  return {
-    sprite: `data:image/png;base64,${sprite.toString('base64')}`,
-    rig: JSON.parse(rig),
+async function writePreferredCharacter(id) {
+  try {
+    await writeFile(characterFile(), `${JSON.stringify({ id }, null, 2)}\n`)
+  } catch (error) {
+    log(`could not persist the character choice: ${String((error && error.message) || error)}`)
   }
+}
+
+/** Ask the harness which characters it can offer, and push the list out. */
+async function refreshCharacters() {
+  const discovery = await readDiscovery()
+  if (discovery === null) return null
+  const index = await fetchCharacters(discovery)
+  if (!index || index.ok !== true) return null
+  characters = Array.isArray(index.characters) ? index.characters : []
+  if (petWindow && !petWindow.isDestroyed()) petWindow.webContents.send('pet:characters', characters)
+  return characters
+}
+
+/** Load one character and hand it to the renderer. */
+async function applyCharacter(id) {
+  const discovery = await readDiscovery()
+  if (discovery === null) return { ok: false, error: '还没有接入 harness' }
+  const payload = await fetchCharacter(discovery, id)
+  if (!payload || payload.ok !== true) return { ok: false, error: String((payload && payload.error) || '加载失败') }
+  characterId = payload.manifest.id
+  notice(`character=${characterId} (${payload.manifest.name})`)
+  await writePreferredCharacter(characterId)
+  if (petWindow && !petWindow.isDestroyed()) {
+    petWindow.webContents.send('pet:character', {
+      manifest: payload.manifest,
+      rig: payload.rig,
+      sprite: `data:image/png;base64,${payload.sprite}`,
+    })
+  }
+  return { ok: true, id: characterId }
 }
 
 // ---------------------------------------------------------------------------
 // The pet window
 // ---------------------------------------------------------------------------
 
-function createPetWindow(assets) {
+function createPetWindow() {
   const area = screen.getPrimaryDisplay().workArea
 
   petWindow = new BrowserWindow({
@@ -116,11 +152,26 @@ function createPetWindow(assets) {
 
   petWindow.loadFile(join(HERE, '..', 'renderer', 'index.html'))
 
-  petWindow.webContents.once('did-finish-load', () => {
-    petWindow.webContents.send('pet:assets', assets)
+  petWindow.webContents.once('did-finish-load', async () => {
     petWindow.webContents.send('pet:status', status)
     if (lastState) petWindow.webContents.send('pet:state', lastState)
     petWindow.showInactive()
+    await refreshCharacters()
+    await applyCharacter(
+      OPTIONS.character || characterId || (characters[0] && characters[0].id) || 'whale-maid',
+    )
+  })
+
+  // A background resident is otherwise very hard to debug: surface renderer
+  // errors in the terminal instead of only in a devtools window nobody opens.
+  petWindow.webContents.on('console-message', (event) => {
+    const level = event && typeof event.level === 'string' ? event.level : 'info'
+    if (level !== 'error' && level !== 'warning' && !ARGS.includes('--dev')) return
+    const message = event && typeof event.message === 'string' ? event.message : String(event)
+    console.log(`[renderer:${level}] ${message}`)
+  })
+  petWindow.webContents.on('render-process-gone', (_event, details) => {
+    notice(`renderer gone: ${details && details.reason}`)
   })
 
   petWindow.on('closed', () => {
@@ -273,6 +324,16 @@ ipcMain.handle('pet:refresh', async () => {
   return state
 })
 
+ipcMain.handle('pet:characters', async () => {
+  const list = await refreshCharacters()
+  return { ok: list !== null, characters: characters }
+})
+
+ipcMain.handle('pet:set-character', async (_event, id) => {
+  if (typeof id !== 'string' || id === '') return { ok: false, error: 'no character id' }
+  return applyCharacter(id)
+})
+
 ipcMain.on('pet:set-interactive', (_event, interactive) => {
   if (petWindow === null || petWindow.isDestroyed()) return
   petWindow.setIgnoreMouseEvents(!interactive, { forward: true })
@@ -297,8 +358,8 @@ app.on('window-all-closed', () => {})
 
 app.whenReady().then(async () => {
   if (process.platform === 'darwin' && app.dock) app.dock.hide()
-  const assets = await loadAssets()
-  createPetWindow(assets)
+  characterId = await readPreferredCharacter()
+  createPetWindow()
   createTray()
   connect()
 

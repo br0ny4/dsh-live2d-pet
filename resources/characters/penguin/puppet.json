@@ -1,0 +1,104 @@
+{
+  "$comment": "Motion rig. Derived automatically at import time; see scripts/lib/rig.mjs for how, and edit rig.overrides.json to correct it without losing the derivation.",
+  "sprite": "character.png",
+  "canvas": {
+    "width": 240,
+    "height": 370
+  },
+  "grid": {
+    "cols": 24,
+    "rows": 44
+  },
+  "influences": [
+    {
+      "name": "crest",
+      "cx": 0.4988,
+      "cy": 0.0537,
+      "rx": 0.1554,
+      "ry": 0.0799,
+      "motion": "sway",
+      "amp": 0.018,
+      "freq": 1.35,
+      "phase": 0.2
+    },
+    {
+      "name": "head",
+      "cx": 0.4988,
+      "cy": 0.2596,
+      "rx": 0.505,
+      "ry": 0.3103,
+      "motion": "sway",
+      "amp": 0.009,
+      "freq": 0.55,
+      "phase": 1.1
+    },
+    {
+      "name": "wingL",
+      "cx": 0.0533,
+      "cy": 0.6766,
+      "rx": 0.136,
+      "ry": 0.1472,
+      "motion": "flap",
+      "amp": 0.012,
+      "freq": 1.05,
+      "phase": 0.4
+    },
+    {
+      "name": "wingR",
+      "cx": 0.9443,
+      "cy": 0.6766,
+      "rx": 0.136,
+      "ry": 0.1472,
+      "motion": "flap",
+      "amp": 0.012,
+      "freq": 1.05,
+      "phase": 2.5
+    },
+    {
+      "name": "torso",
+      "cx": 0.4988,
+      "cy": 0.6766,
+      "rx": 0.3302,
+      "ry": 0.1766,
+      "motion": "breathe",
+      "amp": 0.008,
+      "freq": 0.62,
+      "phase": 0
+    },
+    {
+      "name": "feet",
+      "cx": 0.4988,
+      "cy": 0.9147,
+      "rx": 0.3302,
+      "ry": 0.0992,
+      "motion": "sway",
+      "amp": 0.006,
+      "freq": 0.9,
+      "phase": 3.1
+    },
+    {
+      "name": "eyeL",
+      "cx": 0.2949,
+      "cy": 0.3332,
+      "rx": 0.1142,
+      "ry": 0.0491,
+      "motion": "blink"
+    },
+    {
+      "name": "eyeR",
+      "cx": 0.7027,
+      "cy": 0.3332,
+      "rx": 0.1142,
+      "ry": 0.0491,
+      "motion": "blink"
+    },
+    {
+      "name": "mouth",
+      "cx": 0.5,
+      "cy": 0.3886,
+      "rx": 0.1026,
+      "ry": 0.0654,
+      "motion": "talk"
+    }
+  ]
+}

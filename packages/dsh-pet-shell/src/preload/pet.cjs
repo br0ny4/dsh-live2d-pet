@@ -5,7 +5,10 @@ const { contextBridge, ipcRenderer } = require('electron')
  * discovery secret, and no network. Everything crosses this one narrow surface.
  */
 contextBridge.exposeInMainWorld('dshPet', {
-  onAssets: (callback) => ipcRenderer.on('pet:assets', (_event, assets) => callback(assets)),
+  onCharacter: (callback) => ipcRenderer.on('pet:character', (_event, character) => callback(character)),
+  onCharacters: (callback) => ipcRenderer.on('pet:characters', (_event, characters) => callback(characters)),
+  listCharacters: () => ipcRenderer.invoke('pet:characters'),
+  setCharacter: (id) => ipcRenderer.invoke('pet:set-character', id),
   onState: (callback) => ipcRenderer.on('pet:state', (_event, state) => callback(state)),
   onStatus: (callback) => ipcRenderer.on('pet:status', (_event, status) => callback(status)),
   send: (args) => ipcRenderer.invoke('pet:send', args),

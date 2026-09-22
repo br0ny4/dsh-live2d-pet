@@ -6,9 +6,11 @@
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Version](https://img.shields.io/badge/version-0.1.0-informational.svg)](CHANGELOG.md)
-[![Tests](https://img.shields.io/badge/tests-66%20assertions-brightgreen.svg)](#测试)
+[![Tests](https://img.shields.io/badge/tests-77%20assertions-brightgreen.svg)](#测试)
 
-<img src="docs/images/pet-panel.png" alt="桌宠与指令面板" width="320" />
+<img src="docs/images/pet-panel.png" alt="桌宠与指令面板" width="268" />
+&nbsp;&nbsp;
+<img src="docs/images/pet-penguin.png" alt="企鹅 Pip 与角色切换" width="268" />
 
 </div>
 
@@ -103,9 +105,32 @@ npx electron . --dev                # 详细日志
 
 ## 角色
 
-默认角色是一张扁平立绘，渲染器把它当作可形变网格——`puppet.json` 用椭圆区域标出头发、呆毛、鲸尾鳍、裙摆、躯干、双眼、嘴巴，每个网格顶点按覆盖它的区域权重位移，于是有了头发摆动、尾鳍扇动、呼吸、真正闭合的眨眼、说话时的口型。
+自带两个，也接受你自己的：
 
-<img src="docs/images/character.png" alt="默认角色" width="170" />
+| <img src="docs/images/character-whale-maid.png" width="120" /> | <img src="docs/images/character-penguin.png" width="120" /> |
+|---|---|
+| **DeepSeek 鲸鱼娘**（默认） | **企鹅 Pip**（本项目原创） |
+
+在指令气泡的「角色」下拉框里切换。要用自己的三视图：
+
+```bash
+node scripts/character.mjs add --from ~/我的角色.png --id my-character --name "我的角色"
+```
+
+白底三视图和已抠好的透明 PNG 都吃，会自动抠图、自动绑骨，并输出一张**骨架叠图**供你核对（推导不准时可以写 `rig.overrides.json` 局部修正）。完整说明见 [`docs/CHARACTERS.md`](docs/CHARACTERS.md)。
+
+### 它是怎么动起来的
+
+角色是一张扁平立绘，渲染器把它当作可形变网格——骨架用椭圆区域标出头发、呆毛、鳍、裙摆、躯干、双眼、嘴，每个网格顶点按覆盖它的区域权重位移。在此之上还有一层行为：
+
+| 行为 | 表现 |
+|---|---|
+| 情绪 | 思考 / 执行 / 搁置 / 完成 / 报错各自不同的体态 |
+| **打盹** | 长时间待命后闭眼、呼吸变慢、飘出 `z` |
+| **戳一下** | 点角色它会跳一下并冒感叹号 |
+| **拖动** | 移动窗口时下半身滞后于身体 |
+| **视线** | 眼睛跟随光标；没人理它时自己东张西望 |
+| 徽记 | 完成冒星、报错冒汗滴，都是矢量绘制，不依赖素材 |
 
 真 Live2D 模型是更好的答案，本项目也生产了一个：`resources/live2d/models/whale-maid/` 里有完整的 Cubism 4 模型族（`.moc3` + `.model3.json` + `.cdi3.json` + `physics3.json` + 6 秒循环待机与眨眼/点头/摇头动作 + 4096² 图集 + 可二次编辑的 `.cmo3`），由 [`live2d-pipeline/`](live2d-pipeline/README.md) 从分层 PSD 经 [psd2live](https://github.com/tsunehimatoi/psd2live) 自动绑骨导出。
 
@@ -136,15 +161,20 @@ packages/
     src/renderer/pet.js        全局桌宠 UI + 逐像素命中测试
     test/smoke.mjs             端到端冒烟（9 项）
 scripts/
-  build-character.mjs        三视图 → 透明立绘（含骨架校对叠图）
-  fetch-live2d-assets.mjs    抓取 Cubism Core 与官方样例模型
-  make-doc-images.mjs        合成 README 用图
-  live2d-*.sh                psd2live 构建与运行
+  character.mjs             角色 CLI：list / build / add（自带三视图导入）
+  lib/matte.mjs             抠图：白纸参考稿与透明图两条路
+  lib/rig.mjs               自动绑骨：轮廓、双眼、喙/嘴、躯干、鳍、脚
+  fetch-live2d-assets.mjs   抓取 Cubism Core 与官方样例模型
+  make-penguin-art.mjs      生成原创企鹅角色的三视图
+  make-doc-images.mjs       合成 README 用图
+  live2d-*.sh               psd2live 构建与运行
 docs/
   ARCHITECTURE.md            两层结构、桥协议、状态派生、渲染取舍
+  CHARACTERS.md              角色来源、自定义导入、骨架修正
   VERSIONING.md              版本管理计划
 resources/
-  character/whale-maid/      立绘、骨架、原画
+  characters/whale-maid/     内置角色：立绘、骨架、原画
+  characters/penguin/        内置角色：原创企鹅三视图
   live2d/models/whale-maid/  自产的 Cubism 4 模型
 live2d-pipeline/             分层 PSD → .moc3 的生产流水线（独立 README）
 ```
@@ -155,9 +185,13 @@ live2d-pipeline/             分层 PSD → .moc3 的生产流水线（独立 RE
 pnpm install
 pnpm build                   # 构建插件客户端 bundle 与外壳渲染进程 bundle
 
-# 资产流水线
-pnpm assets:character        # 三视图 → 透明立绘（逐字节可复现）
-pnpm assets:character:debug  # 额外输出骨架叠图，用来核对形变区域坐标
+# 角色
+pnpm characters              # 列出全部角色
+pnpm characters:build        # 重建立绘与桌宠小图（保留既有骨架）
+pnpm characters:rerig        # 重新推导骨架，再核对 debug-overlay.png
+node scripts/character.mjs add --from <图> --id <名>   # 导入自己的角色
+
+# Live2D 官方素材
 pnpm assets:live2d           # 下载 Cubism Core + 官方样例模型
 pnpm assets:live2d:list      # 列出可下载的样例模型
 ```
@@ -172,19 +206,22 @@ DSH_HOME=/tmp/pet-dev npx electron packages/dsh-pet-shell --attach-only --dev
 ## 测试
 
 ```bash
-pnpm test              # 全部 66 项断言
-pnpm test:bridge       # Host 桥 34 项
-pnpm test:shell        # 外壳端到端 9 项
+pnpm test              # 全部 77 项断言
+pnpm test:bridge       # Host 桥 41 项
+pnpm test:shell        # 外壳端到端 13 项
 pnpm test:model        # 模型结构 23 项
 ```
 
-`test:shell` 是真正的集成测试：它拉起一个只实现三条路由的假 harness，再把**真的 Electron 外壳**跑起来接上去，校验接入日志、渲染进程拿到的画布、截图的尺寸与格式。它唯一判断不了的是角色好不好看——那需要人眼看 PNG（加 `--keep-shot` 会保留截图路径）。
+`test:shell` 是真正的集成测试：它拉起一个只实现三条路由的假 harness，再把**真的 Electron 外壳**跑起来接上去，校验接入日志、零渲染错误、角色加载、截图的尺寸与格式。它唯一判断不了的是角色好不好看——那需要人眼看 PNG（加 `--keep-shot` 会保留截图路径）。
+
+渲染进程的错误会**直接判定测试失败**。这条规则不是装饰：徽记层曾经因为「WebGL 画布拿不到 2D 上下文」每帧抛异常，而界面看起来完全正常，正是这条断言把它抓出来的。
 
 ## 文档
 
 | 文档 | 内容 |
 |---|---|
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | 两层结构的由来、harness 接入点、状态派生、桥协议规格、渲染取舍 |
+| [`docs/CHARACTERS.md`](docs/CHARACTERS.md) | 角色来源、导入自己的三视图、骨架修正、角色查找顺序 |
 | [`docs/VERSIONING.md`](docs/VERSIONING.md) | 版本号规则、桥协议版本、兼容性矩阵、发布流程、分支策略 |
 | [`CHANGELOG.md`](CHANGELOG.md) | 变更记录 |
 | [`live2d-pipeline/README.md`](live2d-pipeline/README.md) | 分层 PSD → `.moc3` 的完整生产流程与复现命令 |

@@ -2,6 +2,8 @@
 # 插件包的客户端 bundle 由 `pnpm build`（以及 npm 的 prepare 钩子）生成；
 # 外壳的渲染进程 bundle 由 prestart 生成。
 packages/dsh-live2d-pet/lib/client.js
+# Characters copied into the package at build time; resources/characters is the source
+packages/dsh-live2d-pet/characters/
 packages/dsh-pet-shell/src/renderer/bundle.js
 out/
 dist/
@@ -21,9 +23,9 @@ resources/live2d/models/*
 # so on a fresh clone it would list models that are not there. Not tracked.
 
 # Character pipeline intermediates (regenerate with `pnpm assets:character`)
-resources/character/*/debug-overlay.png
-resources/character/*/debug-mask.png
-resources/character/*/preview.png
+resources/characters/*/debug-overlay.png
+resources/characters/*/debug-mask.png
+resources/characters/*/preview.png
 
 # psd2live 生产流水线：420 MB 的 Gradle 发行版与缓存、中间图层 PNG、调试输出
 live2d-pipeline/build/

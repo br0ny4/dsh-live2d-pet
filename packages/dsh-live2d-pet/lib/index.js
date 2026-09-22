@@ -32,6 +32,10 @@ import { randomBytes } from 'node:crypto'
 import { mkdir, writeFile, rm } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
+import { listCharacters, loadCharacter, userCharacterRoot } from './characters.js'
+
+/** Same-origin path the in-page pet fetches its characters from. */
+const CHARACTER_ROUTE = '/dsh-live2d-pet/characters'
 
 const BRIDGE_VERSION = 1
 /** A running session with no event for this long reads as stalled/waiting. */
@@ -262,6 +266,62 @@ export function apply(ctx, config) {
     }
   }
 
+  // ---- character registry -------------------------------------------------
+
+  /** Plain JSON only: the manifest's leaf fields, never a live object. */
+  async function characterIndex() {
+    const characters = await listCharacters()
+    return {
+      ok: true,
+      characters: characters.map(({ id, name, description, author, license, builtin }) => ({
+        id, name, description, author, license, builtin: builtin === true,
+      })),
+      userRoot: userCharacterRoot(),
+    }
+  }
+
+  async function characterPayload(id) {
+    const character = await loadCharacter(id)
+    if (character === null) return { ok: false, error: `unknown character: ${id}` }
+    return { ok: true, manifest: character.manifest, rig: character.rig, sprite: character.sprite }
+  }
+
+  function sendJson(res, status, body, cacheable) {
+    const payload = JSON.stringify(body)
+    res.writeHead(status, {
+      'content-type': 'application/json; charset=utf-8',
+      'content-length': Buffer.byteLength(payload),
+      'cache-control': cacheable ? 'private, max-age=300' : 'no-store',
+    })
+    res.end(payload)
+  }
+
+  // The in-page pet cannot reach the loopback bridge — a page can only fetch
+  // its own origin — so the same two routes are also published on the harness's
+  // own web carrier. Same-origin, loopback-bound, and serving nothing but
+  // character art, which ships publicly in this package anyway.
+  const webServer = ctx.get('webServer')
+  if (webServer !== undefined) {
+    ctx.effect(() => webServer.register({
+      kind: 'prefix',
+      path: CHARACTER_ROUTE,
+      handler: async (req, res) => {
+        try {
+          const path = new URL(req.url || '/', 'http://127.0.0.1').pathname
+          if (path === CHARACTER_ROUTE || path === `${CHARACTER_ROUTE}/`) {
+            sendJson(res, 200, await characterIndex(), false)
+            return
+          }
+          const id = decodeURIComponent(path.slice(CHARACTER_ROUTE.length + 1))
+          const payload = await characterPayload(id)
+          sendJson(res, payload.ok ? 200 : 404, payload, payload.ok)
+        } catch (error) {
+          sendJson(res, 500, { ok: false, error: String((error && error.message) || error) }, false)
+        }
+      },
+    }), 'live2d-pet: character route')
+  }
+
   // ---- the bridge itself -------------------------------------------------
 
   const secret = randomBytes(32).toString('hex')
@@ -283,6 +343,21 @@ export function apply(ctx, config) {
     const url = new URL(req.url || '/', 'http://127.0.0.1')
     if (req.method === 'GET' && url.pathname === '/v1/state') {
       send(200, snapshot())
+      return
+    }
+    if (req.method === 'GET' && url.pathname === '/v1/characters') {
+      characterIndex().then(
+        (index) => send(200, index),
+        (error) => send(200, { ok: false, error: String((error && error.message) || error) }),
+      )
+      return
+    }
+    if (req.method === 'GET' && url.pathname.startsWith('/v1/characters/')) {
+      const id = decodeURIComponent(url.pathname.slice('/v1/characters/'.length))
+      characterPayload(id).then(
+        (payload) => send(payload.ok ? 200 : 404, payload),
+        (error) => send(200, { ok: false, error: String((error && error.message) || error) }),
+      )
       return
     }
     if (req.method === 'GET' && url.pathname === '/v1/events') {

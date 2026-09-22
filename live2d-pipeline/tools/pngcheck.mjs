@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import zlib from 'node:zlib';
 
 const SRC = process.argv[2]
-  || join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'resources', 'character', 'whale-maid', 'character.png');
+  || join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'resources', 'characters', 'whale-maid', 'character.png');
 const f = readFileSync(SRC);
 let p = 8; const chunks = []; let ihdr = null; const idat = [];
 while (p < f.length) {

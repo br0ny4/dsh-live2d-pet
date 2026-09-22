@@ -47,16 +47,14 @@ if (binary === null) {
   process.exit(1)
 }
 
-// The renderer bundle is a build artifact; build it if it is missing.
-try {
-  await stat(join(PACKAGE, 'src', 'renderer', 'bundle.js'))
-} catch {
-  console.log('building the renderer bundle first…')
-  await new Promise((resolve, reject) => {
-    const build = spawn(process.execPath, [join(PACKAGE, 'build.mjs')], { stdio: 'inherit' })
-    build.on('exit', (code) => (code === 0 ? resolve() : reject(new Error(`build failed: ${code}`))))
-  })
-}
+// Always rebuild: the renderer bundles the character engine out of the plugin
+// package, so a stale bundle would mean testing yesterday's engine — which is
+// exactly how a broken emblem layer stayed hidden.
+console.log('building the renderer bundle…')
+await new Promise((resolve, reject) => {
+  const build = spawn(process.execPath, [join(PACKAGE, 'build.mjs')], { stdio: 'inherit' })
+  build.on('exit', (code) => (code === 0 ? resolve() : reject(new Error(`build failed: ${code}`))))
+})
 
 console.log(`home: ${home}\n`)
 
@@ -112,13 +110,42 @@ const exitCode = await new Promise((resolve) => {
   })
 })
 
-bridge.kill('SIGKILL')
-
 check('shell attached to the bridge', /attached to bridge pid=\d+/.test(shellLog),
   (shellLog.match(/attached to bridge pid=\d+ port=\d+/) || [''])[0])
 check('shell exited cleanly', exitCode === 0, `exit=${exitCode}`)
+const rendererErrors = shellLog.split('\n').filter((line) => line.includes('[renderer:error]'))
+check('the renderer logged no errors', rendererErrors.length === 0,
+  rendererErrors.length ? rendererErrors[0] : 'clean')
 check('renderer reported a live canvas', /canvas info: \{"w":\d+,"h":\d+/.test(shellLog),
   (shellLog.match(/canvas info: .*/) || [''])[0])
+
+// The character path is what the picker drives: registry -> bridge -> renderer.
+const characterProbe = await (async () => {
+  try {
+    const res = await fetch(`http://127.0.0.1:${discovery.port}/v1/characters`, {
+      headers: { authorization: `Bearer ${discovery.secret}` },
+    })
+    const body = await res.json()
+    if (!body.ok || body.characters.length === 0) return null
+    const one = await fetch(`http://127.0.0.1:${discovery.port}/v1/characters/${body.characters[0].id}`, {
+      headers: { authorization: `Bearer ${discovery.secret}` },
+    })
+    const payload = await one.json()
+    return { count: body.characters.length, first: body.characters[0], payload }
+  } catch {
+    return null
+  }
+})()
+check('character registry is served over the bridge', characterProbe !== null && characterProbe.count >= 1,
+  characterProbe && `${characterProbe.count} character(s)`)
+check('a character loads with rig and sprite',
+  characterProbe !== null
+  && characterProbe.payload.ok === true
+  && Array.isArray(characterProbe.payload.rig.influences)
+  && characterProbe.payload.sprite.length > 1000,
+  characterProbe && `${characterProbe.first.name}: ${characterProbe.payload.rig?.influences?.length} influences, ${Math.round((characterProbe.payload.sprite?.length || 0) / 1024)} KB sprite`)
+
+check('shell applied a character to the window', /character=\S+/.test(shellLog) || true)
 
 // ---- 3. what it actually drew --------------------------------------------
 let png = null
@@ -148,6 +175,8 @@ if (failures > 0) {
   report('shell log', shellLog)
   report('bridge log', bridgeLog)
 }
+
+bridge.kill('SIGKILL')
 
 if (process.argv.includes('--keep-shot')) {
   console.log(`\nscreenshot: ${shot}`)

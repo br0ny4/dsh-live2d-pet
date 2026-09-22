@@ -97,6 +97,12 @@
 .dshl2d-dot.is-done { background: #22b573; }
 .dshl2d-dot.is-error { background: #e5484d; }
 
+.dshl2d-label {
+  flex: 0 0 auto;
+  font-size: 11px;
+  color: var(--dsw-alias-label-tertiary, #6b7280);
+}
+
 .dshl2d-sel {
   flex: 1 1 auto;
   min-width: 0;

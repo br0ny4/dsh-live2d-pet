@@ -20,6 +20,53 @@ const CSS = __PET_CSS__
 
 const QUICK_COMMANDS = ['跑一下测试并告诉我结果', '总结这个仓库的架构', '看看当前目录有什么']
 
+/**
+ * Same-origin route the Host half publishes. A page can only fetch its own
+ * origin, so the desktop bridge (loopback + bearer secret) is unreachable from
+ * here by design — the Host half serves the same registry on the app's carrier.
+ */
+const CHARACTER_ROUTE = '/dsh-live2d-pet/characters'
+const CHARACTER_KEY = 'dsh-live2d-pet/character'
+
+/** The character inlined at build time: what renders before the fetch lands. */
+const FALLBACK = { id: 'whale-maid', name: 'DeepSeek 鲸鱼娘', rig: RIG, sprite: SPRITE }
+
+function readStoredCharacter() {
+  try {
+    return window.localStorage.getItem(CHARACTER_KEY) || ''
+  } catch {
+    return ''
+  }
+}
+
+function storeCharacter(id) {
+  try {
+    window.localStorage.setItem(CHARACTER_KEY, id)
+  } catch {
+    /* private mode, or storage disabled — the choice just does not persist */
+  }
+}
+
+/** Fetch one character; resolves to a shape the renderer accepts. */
+async function fetchCharacter(id) {
+  const response = await fetch(`${CHARACTER_ROUTE}/${encodeURIComponent(id)}`)
+  const payload = await response.json()
+  if (!payload || payload.ok !== true) throw new Error(String((payload && payload.error) || '加载失败'))
+  return {
+    id: payload.manifest.id,
+    name: payload.manifest.name,
+    rig: payload.rig,
+    sprite: `data:image/png;base64,${payload.sprite}`,
+  }
+}
+
+async function fetchCharacterList() {
+  const response = await fetch(CHARACTER_ROUTE)
+  const payload = await response.json()
+  if (!payload || payload.ok !== true) throw new Error(String((payload && payload.error) || '加载失败'))
+  return payload.characters || []
+}
+
 /** Shipped plugins inline their stylesheet behind a plugin-tagged <style> tag. */
 const STYLE_TAG_ID = 'dsh-live2d-pet/pet.css'
 if (typeof document !== 'undefined' && document.querySelector(`style[data-plugin-css="${STYLE_TAG_ID}"]`) === null) {
@@ -77,6 +124,9 @@ export function apply(ctx) {
       })
       .slice(0, 40), [rowsKey])
 
+    const [characters, setCharacters] = React.useState([])
+    const [characterId, setCharacterId] = React.useState(() => readStoredCharacter() || FALLBACK.id)
+    const [character, setCharacter] = React.useState(FALLBACK)
     const [open, setOpen] = React.useState(false)
     const [target, setTarget] = React.useState('')
     const [text, setText] = React.useState('')
@@ -99,14 +149,43 @@ export function apply(ctx) {
     }, [rows, currentId])
 
     React.useEffect(() => {
-      if (!canvasRef.current) return undefined
-      const character = createCharacter(canvasRef.current, { rig: RIG, sprite: SPRITE })
-      characterRef.current = character
+      let alive = true
+      fetchCharacterList()
+        .then((list) => {
+          if (alive) setCharacters(list)
+        })
+        .catch(() => {
+          /* no route (older harness, or a non-web carrier): the built-in stays */
+        })
       return () => {
-        character.dispose()
-        characterRef.current = null
+        alive = false
       }
     }, [])
+
+    React.useEffect(() => {
+      if (characterId === character.id) return undefined
+      let alive = true
+      fetchCharacter(characterId)
+        .then((next) => {
+          if (alive) setCharacter(next)
+        })
+        .catch(() => {
+          if (alive) setCharacterId(FALLBACK.id)
+        })
+      return () => {
+        alive = false
+      }
+    }, [characterId, character.id])
+
+    React.useEffect(() => {
+      if (!canvasRef.current) return undefined
+      const renderer = createCharacter(canvasRef.current, { rig: character.rig, sprite: character.sprite })
+      characterRef.current = renderer
+      return () => {
+        renderer.dispose()
+        characterRef.current = null
+      }
+    }, [character])
 
     const running = runningId !== '' && runningId === target
     const anyRunning = runningId !== ''
@@ -118,6 +197,13 @@ export function apply(ctx) {
       if (running) character.setMood('working')
       else if (!note || note.kind === 'info') character.setMood('idle')
     }, [running, note])
+
+    // A click is a poke; the character notices even when nothing else happens.
+    React.useEffect(() => {
+      if (!open) return
+      const character = characterRef.current
+      if (character) character.react('poke')
+    }, [open])
 
     React.useEffect(() => {
       const character = characterRef.current
@@ -230,8 +316,26 @@ export function apply(ctx) {
               `${shortId(row.id)}${row.title ? ` · ${row.title.slice(0, 18)}` : ''}${row.running ? ' ●' : ''}`))),
     )
 
+    const characterRow = characters.length > 1
+      ? React.createElement('div', { className: 'dshl2d-row' },
+          React.createElement('span', { className: 'dshl2d-label' }, '角色'),
+          React.createElement('select', {
+            className: 'dshl2d-sel',
+            value: character.id,
+            title: character.name,
+            onChange: (event) => {
+              storeCharacter(event.target.value)
+              setCharacterId(event.target.value)
+            },
+          }, characters.map((entry) => React.createElement('option', {
+            key: entry.id,
+            value: entry.id,
+          }, entry.name + (entry.builtin ? '' : ' · 自定')))))
+      : null
+
     const panel = React.createElement('div', { className: 'dshl2d-panel' },
       header,
+      characterRow,
       React.createElement('textarea', {
         className: 'dshl2d-ta',
         placeholder: '给这个会话下达指令…（⌘/Ctrl + Enter 发送）',

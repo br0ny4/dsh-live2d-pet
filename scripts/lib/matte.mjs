@@ -1,45 +1,40 @@
-#!/usr/bin/env node
 /**
- * Turn the three-view reference sheet into a single transparent front-view
- * sprite for the desktop pet, and (with --debug) render an overlay that shows
- * where the puppet's motion influences sit.
+ * Shared matte: turn a reference sheet into a transparent character sprite.
  *
- * Pipeline
- *   1. find the character columns by scanning for empty (all-white) vertical gaps
- *   2. keep the first panel (the front view) and crop it to its content box
- *   3. remove the background with a border flood fill, so white *inside* the
- *      character (apron, socks, frills, highlights) survives
- *   4. bleed edge colour outward and feather the alpha, so no white halo remains
- *   5. write character.png (+ a checkerboard preview and the debug overlay)
+ * Extracted from the character build script so the same code serves both the
+ * built-in characters and user uploads. The pipeline is two-stage on purpose:
  *
- * Usage:
- *   node scripts/build-character.mjs
- *   node scripts/build-character.mjs --debug
+ *   1. only pixels at or above `PAPER_MIN` seed the border flood fill, which is
+ *      what protects white regions *inside* the character (an apron, socks,
+ *      lace) — their anti-aliased edges sit below the threshold and stop the
+ *      fill;
+ *   2. the JPEG ringing just outside the silhouette is not flooded; it gets a
+ *      narrow alpha ramp instead, gated on distance from the paper so that
+ *      bright artwork far from the edge stays opaque.
+ *
+ * The distance gate ordering is load-bearing: testing brightness alone erases
+ * the character's own white artwork, which is exactly as bright as the paper.
  */
-import { readFile, writeFile, mkdir } from 'node:fs/promises'
-import { dirname, join, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { readFile } from 'node:fs/promises'
 import sharp from 'sharp'
 
-const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
-const DIR = join(ROOT, 'resources', 'character', 'whale-maid')
-const SOURCE = join(DIR, 'source.jpg')
-const OUT_SPRITE = join(DIR, 'character.png')
-const OUT_PREVIEW = join(DIR, 'preview.png')
-const OUT_DEBUG = join(DIR, 'debug-overlay.png')
+export const MATTE_DEFAULTS = {
+  /** Only pixels this bright seed the border flood fill. */
+  paperMin: 250,
+  /** ...and this unsaturated, so coloured artwork is never mistaken for paper. */
+  paperSatMax: 10,
+  /** How far the alpha ramp reaches from the paper. Keep it narrow. */
+  haloFadeTo: 4,
+  /** Ignore slivers narrower than this when splitting a sheet into panels. */
+  minPanelWidth: 40,
+  /** Merge panels separated by a gap narrower than this. */
+  mergeGap: 12,
+  /** Blank margin kept around the cropped character. */
+  padding: 8,
+  /** Width of the sprite the pets inline; about 2x their on-screen size. */
+  petWidth: 240,
+}
 
-/**
- * The sheet's background is *pure* white (measured p50 = 254), which is what
- * makes a two-stage matte possible:
- *
- *  1. Only pixels at or above `PAPER_MIN` seed the flood fill. The character's
- *     white parts — apron, socks, and the scalloped lace headdress — are
- *     anti-aliased against that paper, so their own edge pixels sit below the
- *     threshold and stop the fill from leaking inside them.
- *  2. The JPEG ringing just outside the silhouette lands in the 226–250 band.
- *     Those pixels are not flooded; instead they get an alpha ramp, faded out
- *     with distance so noise far from the art disappears entirely.
- */
 const PAPER_MIN = 250
 const PAPER_SAT_MAX = 10
 /** Brightness band that may be treated as ringing rather than artwork. */
@@ -74,31 +69,48 @@ async function exists(path) {
 }
 
 /** Strict "definitely paper" test, used to find panels and content boxes. */
-function isWhite(r, g, b) {
+export function isWhite(r, g, b) {
   if (r < 248 || g < 248 || b < 248) return false
   return Math.max(r, g, b) - Math.min(r, g, b) <= 14
 }
 
+/** Artwork test for a paper sheet: anything that is not paper. */
+export const paperOccupied = (i, pixels) => !isWhite(pixels[i], pixels[i + 1], pixels[i + 2])
+/** Artwork test for a pre-cut image: anything meaningfully opaque. */
+export const alphaOccupied = (i, pixels) => pixels[i + 3] >= 24
+
 /** Paper: pure white only. Anti-aliased lace edges deliberately fail this. */
-function isPaper(r, g, b) {
+export function isPaper(r, g, b) {
   if (r < PAPER_MIN || g < PAPER_MIN || b < PAPER_MIN) return false
   return Math.max(r, g, b) - Math.min(r, g, b) <= PAPER_SAT_MAX
 }
 
 /** Ringing band: bright and unsaturated, but not pure paper. */
-function isHalo(r, g, b) {
+export function isHalo(r, g, b) {
   if (r < HALO_MIN || g < HALO_MIN || b < HALO_MIN) return false
   return Math.max(r, g, b) - Math.min(r, g, b) <= HALO_SAT_MAX
 }
 
 /** Split the sheet into character panels using empty vertical gaps. */
-function findPanels(rgb, width, height) {
+/**
+ * Split a sheet into panels.
+ *
+ * Works on any channel count, and on either kind of sheet: a white-paper
+ * reference sheet (panels separated by empty white columns) or a pre-cut
+ * transparent image (panels separated by fully transparent columns). Passing
+ * the wrong stride here is what silently merged the three views of a PNG sheet
+ * into one panel, so the stride is explicit.
+ *
+ * @param pixels - raw buffer.
+ * @param channels - bytes per pixel in that buffer.
+ * @param occupied - predicate over a pixel index: is this pixel artwork?
+ */
+export function findPanels(pixels, width, height, channels, occupied) {
   const occupancy = new Int32Array(width)
   for (let y = 0; y < height; y++) {
-    const row = y * width * 3
+    const row = y * width
     for (let x = 0; x < width; x++) {
-      const i = row + x * 3
-      if (!isWhite(rgb[i], rgb[i + 1], rgb[i + 2])) occupancy[x]++
+      if (occupied((row + x) * channels, pixels)) occupancy[x]++
     }
   }
 
@@ -122,17 +134,16 @@ function findPanels(rgb, width, height) {
   return panels.filter(([a, b]) => b - a >= MIN_PANEL_WIDTH)
 }
 
-/** Content bounding box inside a column range. */
-function contentBox(rgb, width, x0, x1, y0, y1) {
+/** Content bounding box inside a column range, using the same predicate. */
+export function contentBox(pixels, width, channels, x0, x1, y0, y1, occupied) {
   let minX = x1
   let maxX = x0
   let minY = y1
   let maxY = y0
   for (let y = y0; y < y1; y++) {
-    const row = y * width * 3
+    const row = y * width
     for (let x = x0; x < x1; x++) {
-      const i = row + x * 3
-      if (isWhite(rgb[i], rgb[i + 1], rgb[i + 2])) continue
+      if (!occupied((row + x) * channels, pixels)) continue
       if (x < minX) minX = x
       if (x > maxX) maxX = x
       if (y < minY) minY = y
@@ -148,7 +159,7 @@ function contentBox(rgb, width, x0, x1, y0, y1) {
  * unambiguously paper, is what protects the white regions *inside* the
  * character — apron, socks, and the lace headdress.
  */
-function floodBackground(pixels, width, height, channels) {
+export function floodBackground(pixels, width, height, channels) {
   const background = new Uint8Array(width * height)
   const stack = new Int32Array(width * height)
   let top = 0
@@ -188,7 +199,7 @@ function floodBackground(pixels, width, height, channels) {
 }
 
 /** 4-neighbour BFS distance (in pixels, capped) from the nearest paper pixel. */
-function distanceFromPaper(background, width, height, cap) {
+export function distanceFromPaper(background, width, height, cap) {
   const dist = new Uint8Array(width * height).fill(cap + 1)
   const queue = new Int32Array(width * height)
   let head = 0
@@ -225,7 +236,7 @@ function distanceFromPaper(background, width, height, cap) {
  * next to the paper is ringing (or a genuine anti-aliased silhouette edge), so
  * it fades out — aggressively near the paper, not at all far from it.
  */
-function edgeAlpha(value, distance) {
+export function edgeAlpha(value, distance) {
   // The distance gate must come FIRST. Testing brightness alone erases the
   // character's own white artwork — apron, socks, lace — because it is exactly
   // as bright as the paper; only distance from the paper says "artwork".
@@ -238,7 +249,7 @@ function edgeAlpha(value, distance) {
 }
 
 /** Copy neighbouring foreground colour outward so feathered edges don't go white. */
-function bleedColour(rgba, background, width, height, passes = 6) {
+export function bleedColour(rgba, background, width, height, passes = 6) {
   let frontier = []
   for (let p = 0; p < width * height; p++) if (background[p]) frontier.push(p)
 
@@ -277,7 +288,7 @@ function bleedColour(rgba, background, width, height, passes = 6) {
 }
 
 /** Feather alpha with two 3x3 box passes so the cutout doesn't alias. */
-function featherAlpha(alpha, width, height) {
+export function featherAlpha(alpha, width, height) {
   let src = alpha
   for (let pass = 0; pass < 2; pass++) {
     const dst = new Float32Array(src.length)
@@ -303,7 +314,7 @@ function featherAlpha(alpha, width, height) {
   return src
 }
 
-function checkerboard(width, height, cell = 16) {
+export function checkerboard(width, height, cell = 16) {
   const out = Buffer.alloc(width * height * 3)
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
@@ -318,7 +329,7 @@ function checkerboard(width, height, cell = 16) {
   return out
 }
 
-function overlaySvg(width, height, puppet) {
+export function overlaySvg(width, height, puppet) {
   const parts = []
   // Normalised 0.1 grid: brighter every 0.5.
   for (let i = 1; i < 10; i++) {
@@ -350,132 +361,116 @@ function overlaySvg(width, height, puppet) {
   )
 }
 
-async function main() {
-  await mkdir(DIR, { recursive: true })
-  const image = sharp(SOURCE)
-  const meta = await image.metadata()
-  const { data: rgb, info } = await image.raw().toBuffer({ resolveWithObject: true })
+/**
+ * Turn one panel of a reference sheet into a transparent sprite.
+ *
+ * @param options.source - path to the sheet (any format sharp reads).
+ * @param options.panelIndex - which detected panel to use; 0 is the leftmost,
+ *   which is where a conventional front view sits.
+ * @param options.padding - blank margin kept around the cropped character.
+ * @param options.petWidth - width of the small sprite written for the pets.
+ * @returns the full-size RGBA sprite, the small pet sprite, and a report.
+ */
+export async function extractSprite(options) {
+  const settings = { ...MATTE_DEFAULTS, ...options }
+  // Always RGBA: a JPEG sheet and a pre-cut PNG then take the same code path,
+  // and a channel count is never assumed.
+  const { data: pixels, info } = await sharp(settings.source)
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true })
   const { width, height } = info
-  console.log(`source   ${width}x${height} ${meta.format}`)
+  const meta = await sharp(settings.source).metadata()
 
-  const panels = findPanels(rgb, width, height)
-  console.log(`panels   ${panels.length} -> ${panels.map(([a, b]) => `${a}-${b}(${b - a}px)`).join(', ')}`)
-  if (!panels.length) throw new Error('no character panels found; is the sheet background really white?')
+  // A sheet that is already cut out (a transparent PNG) needs no matte at all —
+  // and would defeat the paper test, because it has no white border to flood.
+  let transparent = 0
+  for (let p = 0; p < width * height; p++) {
+    if (pixels[p * 4 + 3] < 128) transparent++
+  }
+  const preCut = transparent / (width * height) > 0.05
+  const occupied = preCut ? alphaOccupied : paperOccupied
 
-  const [px0, px1] = panels[0]
-  const box = contentBox(rgb, width, px0, px1, 0, height)
-  const left = Math.max(0, box.minX - PADDING)
-  const top = Math.max(0, box.minY - PADDING)
-  const right = Math.min(width, box.maxX + 1 + PADDING)
-  const bottom = Math.min(height, box.maxY + 1 + PADDING)
+  const panels = findPanels(pixels, width, height, 4, occupied)
+  if (panels.length === 0) {
+    throw new Error(preCut
+      ? 'no character found: the image is fully transparent'
+      : 'no character panel found; the sheet background must be white, or supply a pre-cut transparent image')
+  }
+  if (settings.panelIndex >= panels.length) {
+    throw new Error(`panel ${settings.panelIndex} requested but only ${panels.length} found`)
+  }
+  const [px0, px1] = panels[settings.panelIndex]
+  const box = contentBox(pixels, width, 4, px0, px1, 0, height, occupied)
+
+  const left = Math.max(0, box.minX - settings.padding)
+  const top = Math.max(0, box.minY - settings.padding)
+  const right = Math.min(width, box.maxX + 1 + settings.padding)
+  const bottom = Math.min(height, box.maxY + 1 + settings.padding)
   const cropW = right - left
   const cropH = bottom - top
-  console.log(`front    crop ${cropW}x${cropH} at (${left},${top})`)
 
-  // Repack the crop into a tight RGBA buffer we can edit in place.
   const rgba = Buffer.alloc(cropW * cropH * 4)
   for (let y = 0; y < cropH; y++) {
-    const src = ((top + y) * width + left) * 3
-    for (let x = 0; x < cropW; x++) {
-      const s = src + x * 3
-      const d = (y * cropW + x) * 4
-      rgba[d] = rgb[s]
-      rgba[d + 1] = rgb[s + 1]
-      rgba[d + 2] = rgb[s + 2]
-      rgba[d + 3] = 255
-    }
+    pixels.copy(rgba, y * cropW * 4, (((top + y) * width) + left) * 4, (((top + y) * width) + right) * 4)
   }
 
-  const background = floodBackground(rgba, cropW, cropH, 4)
-  const distance = distanceFromPaper(background, cropW, cropH, HALO_FADE_TO)
   let paper = 0
   let softened = 0
   const alpha = new Float32Array(cropW * cropH)
-  for (let p = 0; p < cropW * cropH; p++) {
-    if (background[p]) {
-      alpha[p] = 0
-      paper++
-      continue
-    }
-    const i = p * 4
-    const value = Math.min(rgba[i], rgba[i + 1], rgba[i + 2])
-    const a = edgeAlpha(value, distance[p])
-    alpha[p] = a
-    if (a < 1) softened++
-  }
-  const ratio = ((paper / (cropW * cropH)) * 100).toFixed(1)
-  console.log(`matte    paper ${paper} px (${ratio}%), softened ${softened} edge px`)
 
-  bleedColour(rgba, background, cropW, cropH)
+  if (preCut) {
+    // The source alpha already is the matte; only feather it.
+    for (let p = 0; p < cropW * cropH; p++) {
+      const a = rgba[p * 4 + 3] / 255
+      alpha[p] = a
+      if (a < 0.5) paper++
+      else if (a < 1) softened++
+    }
+  } else {
+    const background = floodBackground(rgba, cropW, cropH, 4)
+    const distance = distanceFromPaper(background, cropW, cropH, settings.haloFadeTo)
+    for (let p = 0; p < cropW * cropH; p++) {
+      if (background[p]) {
+        alpha[p] = 0
+        paper++
+        continue
+      }
+      const i = p * 4
+      const value = Math.min(rgba[i], rgba[i + 1], rgba[i + 2])
+      const a = edgeAlpha(value, distance[p])
+      alpha[p] = a
+      if (a < 1) softened++
+    }
+    bleedColour(rgba, background, cropW, cropH)
+  }
+
   const feathered = featherAlpha(alpha, cropW, cropH)
   for (let p = 0; p < cropW * cropH; p++) {
     rgba[p * 4 + 3] = Math.max(0, Math.min(255, Math.round(feathered[p] * 255)))
   }
 
-  if (process.argv.includes('--debug-alpha')) {
-    for (const [px, py] of [[240, 150], [240, 600], [195, 775], [230, 560]]) {
-      const q = py * cropW + px
-      const hex = rgba.subarray(q * 4, q * 4 + 4)
-      console.log(`probe (${px},${py}) rawAlpha=${alpha[q].toFixed(3)} feathered=${feathered[q].toFixed(3)} rgba=[${[...hex].join(',')}]`)
-    }
-  }
-
-  if (process.argv.includes('--dump-mask')) {
-    const maskOut = Buffer.alloc(cropW * cropH * 3)
-    for (let q = 0; q < cropW * cropH; q++) {
-      const paper = background[q] ? 255 : 0
-      const dist = distance[q]
-      maskOut[q * 3] = paper
-      maskOut[q * 3 + 1] = paper ? 255 : Math.min(255, dist * 51)
-      maskOut[q * 3 + 2] = paper ? 255 : 0
-    }
-    await sharp(maskOut, { raw: { width: cropW, height: cropH, channels: 3 } })
-      .png().toFile(join(DIR, 'debug-mask.png'))
-    console.log(`mask     -> ${join(DIR, 'debug-mask.png')} (white=paper, green ramp=distance)`)
-  }
-
-  await sharp(rgba, { raw: { width: cropW, height: cropH, channels: 4 } })
-    .png({ compressionLevel: 9 })
-    .toFile(OUT_SPRITE)
-  console.log(`sprite   -> ${OUT_SPRITE}`)
-
-  await sharp(checkerboard(cropW, cropH), { raw: { width: cropW, height: cropH, channels: 3 } })
-    .composite([{ input: rgba, raw: { width: cropW, height: cropH, channels: 4 } }])
-    .png()
-    .toFile(OUT_PREVIEW)
-  console.log(`preview  -> ${OUT_PREVIEW}`)
-
-  // The size the pets actually render at: the live2d plugin inlines this one,
-  // so it is part of the build rather than an ad-hoc step.
-  const petPath = join(DIR, 'character-pet.png')
-  await sharp(rgba, { raw: { width: cropW, height: cropH, channels: 4 } })
-    .resize({ width: PET_WIDTH })
+  const pet = await sharp(rgba, { raw: { width: cropW, height: cropH, channels: 4 } })
+    .resize({ width: settings.petWidth })
     .png({ compressionLevel: 9, palette: true, quality: 92, effort: 10 })
-    .toFile(petPath)
-  const petBytes = (await readFile(petPath)).length
-  console.log(`pet      -> ${petPath} (${PET_WIDTH}px, ${(petBytes / 1024).toFixed(0)} KB)`)
+    .toBuffer()
 
-  if (process.argv.includes('--debug')) {
-    const puppetPath = join(DIR, 'puppet.json')
-    let puppet = null
-    if (await exists(puppetPath)) {
-      puppet = JSON.parse(await readFile(puppetPath, 'utf8'))
-      console.log(`regions  ${puppet.influences?.length ?? 0} influences from puppet.json`)
-    } else {
-      console.log('regions  (no puppet.json yet — drawing grid only)')
-    }
-    await sharp(checkerboard(cropW, cropH), { raw: { width: cropW, height: cropH, channels: 3 } })
-      .composite([
-        { input: rgba, raw: { width: cropW, height: cropH, channels: 4 } },
-        { input: overlaySvg(cropW, cropH, puppet), top: 0, left: 0 },
-      ])
-      .png()
-      .toFile(OUT_DEBUG)
-    console.log(`debug    -> ${OUT_DEBUG}`)
+  return {
+    rgba,
+    width: cropW,
+    height: cropH,
+    pet,
+    petWidth: settings.petWidth,
+    petHeight: Math.round((cropH / cropW) * settings.petWidth),
+    report: {
+      sheet: { width, height, format: meta.format },
+      preCut,
+      panels,
+      panelIndex: settings.panelIndex,
+      box: { left, top, width: cropW, height: cropH },
+      paperPixels: paper,
+      softenedPixels: softened,
+      totalPixels: cropW * cropH,
+    },
   }
 }
-
-main().catch((error) => {
-  console.error(`build-character failed: ${error.stack ?? error.message}`)
-  process.exitCode = 1
-})

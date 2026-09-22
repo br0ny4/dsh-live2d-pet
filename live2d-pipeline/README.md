@@ -1,6 +1,6 @@
 # whale-maid → Live2D Cubism 4 model pipeline
 
-Turns the flat front-view illustration `resources/character/whale-maid/character.png`
+Turns the flat front-view illustration `resources/characters/whale-maid/character.png`
 (484×853 RGBA) into a working Cubism 4 model via **[psd2live](https://github.com/tsunehimatoi/psd2live)**,
 built from source on macOS.
 

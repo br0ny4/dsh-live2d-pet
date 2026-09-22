@@ -129,6 +129,25 @@ body {
 
 #phase { flex: 0 0 auto; }
 
+.label {
+  flex: 0 0 auto;
+  font-size: 11px;
+  color: #9aa6c4;
+}
+
+#characterSelect {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 11px;
+  font-family: inherit;
+  color: inherit;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(120, 145, 200, 0.3);
+  border-radius: 7px;
+  padding: 2px 4px;
+}
+#characterSelect option { color: #10151f; }
+
 #session {
   flex: 1 1 auto;
   min-width: 0;

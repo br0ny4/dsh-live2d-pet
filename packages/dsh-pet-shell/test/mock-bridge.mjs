@@ -15,6 +15,9 @@ import { createServer } from 'node:http'
 import { mkdir, writeFile, mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+// The real registry: the shell's character path is exercised against the same
+// manifests and sprites the plugin serves in production.
+import { listCharacters, loadCharacter } from '../../dsh-live2d-pet/lib/characters.js'
 
 if (process.env.DSH_HOME === undefined) {
   process.env.DSH_HOME = await mkdtemp(join(tmpdir(), 'dsh-pet-mock-'))
@@ -72,6 +75,25 @@ const server = createServer((req, res) => {
     res.write(`data: ${JSON.stringify(snapshot())}\n\n`)
     clients.add(res)
     req.on('close', () => clients.delete(res))
+    return
+  }
+  if (url.pathname === '/v1/characters') {
+    listCharacters().then(
+      (characters) => res.writeHead(200, { 'content-type': 'application/json' })
+        .end(JSON.stringify({ ok: true, characters })),
+      (error) => res.writeHead(200).end(JSON.stringify({ ok: false, error: String(error.message) })),
+    )
+    return
+  }
+  if (url.pathname.startsWith('/v1/characters/')) {
+    const id = decodeURIComponent(url.pathname.slice('/v1/characters/'.length))
+    loadCharacter(id).then(
+      (character) => res.writeHead(200, { 'content-type': 'application/json' })
+        .end(JSON.stringify(character === null
+          ? { ok: false, error: `unknown character: ${id}` }
+          : { ok: true, manifest: character.manifest, rig: character.rig, sprite: character.sprite })),
+      (error) => res.writeHead(200).end(JSON.stringify({ ok: false, error: String(error.message) })),
+    )
     return
   }
   if (url.pathname === '/v1/prompt') {

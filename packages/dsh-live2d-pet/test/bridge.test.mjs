@@ -201,6 +201,27 @@ await drainPushes(300)
 check('every transition was pushed over SSE without polling', pushes > beforePushes,
   `${pushes - beforePushes} new push(es)`)
 
+// ---- characters -----------------------------------------------------------
+const characterIndex = await (await fetch(`${base}/v1/characters`, { headers: auth })).json()
+check('character registry is listed', characterIndex.ok === true && characterIndex.characters.length >= 1,
+  `${characterIndex.characters ? characterIndex.characters.length : 0} character(s)`)
+check('the built-in character is present',
+  characterIndex.characters.some((entry) => entry.id === 'whale-maid' && entry.builtin === true))
+
+const whaleMaid = await (await fetch(`${base}/v1/characters/whale-maid`, { headers: auth })).json()
+check('a character loads with its rig', whaleMaid.ok === true && Array.isArray(whaleMaid.rig.influences),
+  whaleMaid.rig ? `${whaleMaid.rig.influences.length} influences` : '')
+check('the character sprite is real bytes', typeof whaleMaid.sprite === 'string' && whaleMaid.sprite.length > 1000,
+  whaleMaid.sprite ? `${Math.round(whaleMaid.sprite.length / 1024)} KB base64` : '')
+check('the rig names the motions the renderer drives',
+  whaleMaid.rig.influences.some((inf) => inf.motion === 'blink')
+  && whaleMaid.rig.influences.some((inf) => inf.motion === 'talk'))
+
+const missing = await fetch(`${base}/v1/characters/does-not-exist`, { headers: auth })
+check('an unknown character 404s', missing.status === 404, `status=${missing.status}`)
+check('characters are behind the same bearer gate',
+  (await fetch(`${base}/v1/characters`)).status === 401)
+
 // ---- prompting ------------------------------------------------------------
 check('malformed prompt body is rejected',
   (await fetch(`${base}/v1/prompt`, { method: 'POST', headers: auth, body: '{oops' })).status === 400)

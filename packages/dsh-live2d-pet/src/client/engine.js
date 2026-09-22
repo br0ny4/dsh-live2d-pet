@@ -1,26 +1,31 @@
 /**
- * Mesh-warp character renderer (WebGL).
+ * Mesh-warp character renderer (WebGL) with a small behaviour layer.
  *
- * The default character is a single flat sprite: there is no layered PSD behind
- * it and therefore no Cubism model. What this module does instead is treat the
- * sprite as a deformable mesh — the rig in `puppet.json` names elliptical
- * regions (hair, ahoge, whale-fluke ears, skirt, torso, both eyes, mouth) and
- * every vertex of a grid is displaced by the summed influence of the regions
- * covering it.
+ * The default characters are flat sprites: no layered PSD, therefore no Cubism
+ * model. The renderer treats the sprite as a deformable mesh — the rig names
+ * elliptical regions (head, wings, torso, feet, eyes, mouth, …) and every
+ * vertex of a grid is displaced by the summed influence of the regions covering
+ * it. That buys hair sway, wing flapping, breathing, a blink that genuinely
+ * closes the eyes, and a mouth that opens while the agent talks — without the
+ * Cubism runtime, the Core binary, or an authored `.moc3`.
  *
- * That buys the motions that make a static drawing read as alive — hair sway,
- * ear flapping, breathing, a blink that genuinely closes the eyes, and a mouth
- * that opens while the agent talks — without the Cubism runtime, the Cubism
- * Core binary, or an authored `.moc3`.
+ * On top of the deformation sits a behaviour layer, because "more expressive"
+ * is mostly about *when* things happen rather than how far they move:
+ *
+ *   moods     idle / thinking / working / waiting / sleeping / done / error
+ *   sleep     long idle closes the eyes, slows the breathing, floats a z
+ *   poke      clicking the character makes it start and flash an exclamation
+ *   drag      the lower body lags behind the window while you move it
+ *   look      the eyes follow the cursor, and drift on their own when idle
+ *   emblems   small vector marks drawn over the mesh, no sprite sheet needed
  *
  * Why WebGL rather than many `drawImage` calls: a per-cell 2D blit resamples
  * each cell independently, so neighbouring cells never line up and the whole
- * sprite ends up showing a grid of seams. One textured mesh interpolates across
- * cell boundaries by construction, so the deformation stays continuous.
+ * sprite shows a grid of seams. One textured mesh interpolates across cell
+ * boundaries by construction.
  *
  * A real Live2D model remains the better answer when one exists; a replacement
- * backend only has to satisfy the four methods the UI layers use (`setMood`,
- * `setTalking`, `setPointer`, `dispose`).
+ * backend only has to satisfy the public methods at the bottom of this file.
  */
 
 const TAU = Math.PI * 2
@@ -28,6 +33,11 @@ const TAU = Math.PI * 2
 /** Mesh resolution: finer than the visible motion, so curves stay smooth. */
 const COLS = 24
 const ROWS = 44
+
+/** Default idle time before the character falls asleep. */
+const SLEEP_AFTER_MS = 120000
+/** How long a transient reaction (poke, done, error) stays on screen. */
+const REACTION_MS = 900
 
 const VERTEX_SHADER = `
 attribute vec2 aPos;
@@ -46,8 +56,8 @@ void main() {
   vec4 c = texture2D(uTex, vUV);
   // The sprite is straight-alpha; the canvas is premultiplied. Premultiplying
   // here (rather than letting the blender handle colour alone) is what keeps
-  // the canvas's own alpha correct, so soft lace and shadows stay soft instead
-  // of turning into a white haze over the page behind the window.
+  // the canvas's own alpha correct, so soft shading stays soft instead of
+  // turning into a white haze over the page behind the window.
   gl_FragColor = vec4(c.rgb * c.a, c.a);
 }`
 
@@ -67,14 +77,15 @@ function weightAt(u, v, region) {
 }
 
 /**
- * Mood presets: global body motion. `waiting` barely moves on purpose, so
- * "stalled / needs you" reads differently from "busy" at a glance.
+ * Mood presets. `waiting` barely moves on purpose, so "stalled / needs you"
+ * reads differently from "busy" at a glance; `sleeping` all but stops.
  */
 const MOODS = {
   idle: { bob: 1, speed: 1, shake: 0, hop: 0 },
   thinking: { bob: 1.6, speed: 1.7, shake: 0, hop: 0 },
   working: { bob: 1.7, speed: 1.85, shake: 0, hop: 0 },
   waiting: { bob: 0.35, speed: 0.45, shake: 0, hop: 0 },
+  sleeping: { bob: 0.22, speed: 0.3, shake: 0, hop: 0 },
   done: { bob: 1.1, speed: 1.2, shake: 0, hop: 1 },
   error: { bob: 0.7, speed: 1.3, shake: 1, hop: 0 },
 }
@@ -92,20 +103,20 @@ function compile(gl, type, source) {
 }
 
 export function createCharacter(canvas, options) {
-  const rig = options.rig
+  const rig = options.rig || { influences: [] }
   const regions = rig.influences || []
   const swayRegions = regions.filter((r) => r.motion === 'sway')
   const flapRegions = regions.filter((r) => r.motion === 'flap')
   const breatheRegions = regions.filter((r) => r.motion === 'breathe')
   const blinkRegions = regions.filter((r) => r.motion === 'blink')
   const talkRegions = regions.filter((r) => r.motion === 'talk')
+  /** Where emblems float: the head if the rig names one, else the upper third. */
+  const headRegion = regions.find((r) => r.name === 'head')
+    || regions.find((r) => r.name === 'hair')
+    || { cx: 0.5, cy: 0.22, rx: 0.3, ry: 0.2 }
 
   const gl = canvas.getContext('webgl', {
     alpha: true,
-    // Premultiplied output: the shader premultiplies, and the compositor
-    // expects it. The separate alpha blend below accumulates coverage correctly
-    // across the mesh's triangles — with a single blendFunc the destination
-    // alpha becomes srcAlpha squared, which washes soft edges out.
     premultipliedAlpha: true,
     antialias: true,
     depth: false,
@@ -114,13 +125,23 @@ export function createCharacter(canvas, options) {
   let disposed = false
   let raf = 0
   let ready = false
-  let mood = 'idle'
-  let moodSince = 0
-  let talking = false
-  let pointer = { x: 0.5, y: 0.5, active: false }
-  let blink = 1
-  let nextBlinkAt = 1.4
-  let startedAt = 0
+  let sleepAfterMs = SLEEP_AFTER_MS
+
+  const state = {
+    mood: 'idle',
+    moodSince: 0,
+    reaction: null,
+    talking: false,
+    sleeping: false,
+    idleSince: 0,
+    pointer: { x: 0.5, y: 0.5, active: false },
+    /** Autonomous look target, so an untouched pet still glances around. */
+    glance: { x: 0.5, y: 0.5, until: 0 },
+    drag: { active: false, vx: 0, vy: 0 },
+    blink: 1,
+    nextBlinkAt: 1.4,
+  }
+  let emblemVisible = false
 
   if (gl === null) {
     // No WebGL: still show the character, just without deformation.
@@ -135,6 +156,12 @@ export function createCharacter(canvas, options) {
       setMood() {},
       setTalking() {},
       setPointer() {},
+      react() {},
+      setDragging() {},
+      setSleepAfter() {},
+      isSleeping() {
+        return false
+      },
       dispose() {
         image.onload = null
       },
@@ -226,12 +253,115 @@ export function createCharacter(canvas, options) {
   image.onload = () => {
     canvas.width = image.naturalWidth
     canvas.height = image.naturalHeight
+    overlay.width = canvas.width
+    overlay.height = canvas.height
     gl.viewport(0, 0, canvas.width, canvas.height)
     gl.bindTexture(gl.TEXTURE_2D, texture)
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image)
     ready = true
   }
   image.src = options.sprite
+
+  // A canvas that owns a WebGL context can never hand out a 2D one, so the
+  // emblem layer is a second, transparent canvas stacked over the character.
+  // Drawing emblems into `canvas` itself silently failed on every frame.
+  const overlay = canvas.ownerDocument.createElement('canvas')
+  overlay.style.position = 'absolute'
+  overlay.style.inset = '0'
+  overlay.style.width = '100%'
+  overlay.style.height = '100%'
+  overlay.style.pointerEvents = 'none'
+  if (canvas.parentElement !== null) canvas.parentElement.appendChild(overlay)
+  const ctx2d = overlay.getContext('2d')
+
+  // ---- emblems -------------------------------------------------------------
+  // Drawn in normalised sprite space after the mesh, so they ride the head even
+  // as it deforms. Plain vector marks: no sprite sheet, no font dependency for
+  // anything but the sleeping z.
+
+  function emblemAnchor(now, index) {
+    const float = Math.sin(now / 520 + index) * 0.012
+    return {
+      x: (headRegion.cx + headRegion.rx * (0.6 + index * 0.18)) * overlay.width,
+      y: (headRegion.cy - headRegion.ry * (0.8 + index * 0.24) + float) * overlay.height,
+    }
+  }
+
+  function drawSleep(now) {
+    const size = Math.max(9, overlay.width * 0.09)
+    ctx2d.save()
+    ctx2d.fillStyle = 'rgba(146,166,214,0.95)'
+    ctx2d.font = `700 ${size}px ui-sans-serif, system-ui, sans-serif`
+    ctx2d.textAlign = 'center'
+    for (let i = 0; i < 3; i++) {
+      const phase = ((now / 1600) + i * 0.33) % 1
+      const anchor = emblemAnchor(now, i)
+      ctx2d.globalAlpha = Math.sin(phase * Math.PI) * 0.9
+      ctx2d.fillText('z', anchor.x, anchor.y - phase * size * 0.9)
+    }
+    ctx2d.restore()
+  }
+
+  function drawMark(kind, age) {
+    const anchor = emblemAnchor(state.moodSince === 0 ? 0 : 0, 1)
+    const grow = Math.min(1, age / 110)
+    const rise = age / REACTION_MS
+    const size = Math.max(10, overlay.width * 0.12)
+    ctx2d.save()
+    ctx2d.globalAlpha = Math.max(0, 1 - Math.max(0, (age - REACTION_MS * 0.55) / (REACTION_MS * 0.45)))
+    ctx2d.translate(anchor.x, anchor.y - rise * overlay.height * 0.07)
+    ctx2d.scale(grow, grow)
+
+    if (kind === 'poke') {
+      ctx2d.fillStyle = '#ffb020'
+      ctx2d.strokeStyle = 'rgba(45,32,10,0.5)'
+      ctx2d.lineWidth = Math.max(1, size * 0.08)
+      ctx2d.beginPath()
+      ctx2d.moveTo(-size * 0.08, -size * 0.56)
+      ctx2d.lineTo(size * 0.08, -size * 0.56)
+      ctx2d.lineTo(size * 0.05, -size * 0.1)
+      ctx2d.lineTo(-size * 0.05, -size * 0.1)
+      ctx2d.closePath()
+      ctx2d.fill()
+      ctx2d.stroke()
+      ctx2d.beginPath()
+      ctx2d.arc(0, size * 0.08, size * 0.095, 0, TAU)
+      ctx2d.fill()
+      ctx2d.stroke()
+    } else if (kind === 'done') {
+      ctx2d.fillStyle = '#4fce9b'
+      ctx2d.beginPath()
+      for (let i = 0; i < 8; i++) {
+        const angle = (i / 8) * TAU - Math.PI / 2
+        const radius = i % 2 === 0 ? size * 0.52 : size * 0.17
+        const px = Math.cos(angle) * radius
+        const py = Math.sin(angle) * radius
+        if (i === 0) ctx2d.moveTo(px, py)
+        else ctx2d.lineTo(px, py)
+      }
+      ctx2d.closePath()
+      ctx2d.fill()
+    } else if (kind === 'error') {
+      ctx2d.fillStyle = '#63b3ff'
+      ctx2d.beginPath()
+      ctx2d.moveTo(0, -size * 0.52)
+      ctx2d.bezierCurveTo(size * 0.44, -size * 0.05, size * 0.34, size * 0.44, 0, size * 0.44)
+      ctx2d.bezierCurveTo(-size * 0.34, size * 0.44, -size * 0.44, -size * 0.05, 0, -size * 0.52)
+      ctx2d.fill()
+    } else if (kind === 'wake') {
+      ctx2d.strokeStyle = 'rgba(255,206,110,0.95)'
+      ctx2d.lineWidth = Math.max(1.5, size * 0.11)
+      ctx2d.lineCap = 'round'
+      for (let i = 0; i < 4; i++) {
+        const angle = (i / 4) * TAU + Math.PI / 4
+        ctx2d.beginPath()
+        ctx2d.moveTo(Math.cos(angle) * size * 0.24, Math.sin(angle) * size * 0.24)
+        ctx2d.lineTo(Math.cos(angle) * size * 0.48, Math.sin(angle) * size * 0.48)
+        ctx2d.stroke()
+      }
+    }
+    ctx2d.restore()
+  }
 
   // ---- per-frame deformation ----------------------------------------------
 
@@ -240,38 +370,61 @@ export function createCharacter(canvas, options) {
     raf = requestAnimationFrame(frame)
     if (!ready) return
 
-    if (startedAt === 0) startedAt = now
-    const t = (now - startedAt) / 1000
+    // ---- behaviour ----
+    const mood = state.mood
     const preset = MOODS[mood] || MOODS.idle
 
-    // Blink scheduling: a short close, then a fresh random gap.
-    const moodTime = (now - moodSince) / 1000
-    if (mood === 'idle' || mood === 'waiting') {
-      if (moodTime >= nextBlinkAt) {
-        if (blink === 1) {
-          blink = 0
-          nextBlinkAt = moodTime + 0.16
-        } else {
-          blink = 1
-          nextBlinkAt = moodTime + 2.4 + Math.random() * 3.4
-          moodSince = now
-        }
+    if (mood === 'idle' && !state.sleeping && now - state.idleSince > sleepAfterMs) {
+      state.sleeping = true
+      state.moodSince = now
+    }
+    if (mood !== 'idle' && state.sleeping) {
+      state.sleeping = false
+      state.moodSince = now
+    }
+    if (state.reaction !== null && now - state.moodSince > REACTION_MS) state.reaction = null
+
+    // An untouched pet still looks around: pick a new glance target now and then.
+    if (!state.pointer.active && now > state.glance.until) {
+      state.glance = {
+        x: 0.5 + (Math.random() - 0.5) * 0.55,
+        y: 0.5 + (Math.random() - 0.5) * 0.35,
+        until: now + 1800 + Math.random() * 3200,
       }
-    } else if (blink !== 1) {
-      blink = 1
+    }
+    state.drag.vx *= 0.86
+    state.drag.vy *= 0.86
+
+    if (state.sleeping) {
+      state.blink = Math.max(0, state.blink - 0.07)
+    } else {
+      const moodTime = (now - state.moodSince) / 1000
+      if (state.blink === 1 && moodTime >= state.nextBlinkAt) {
+        state.blink = 0
+        state.nextBlinkAt = moodTime + 0.16
+        state.moodSince = now
+      } else if (state.blink < 1) {
+        const closing = moodTime < state.nextBlinkAt
+        state.blink = Math.max(0, Math.min(1, state.blink + (closing ? -0.35 : 0.22)))
+        if (state.blink >= 1) state.nextBlinkAt = moodTime + 2.4 + Math.random() * 3.4
+      }
     }
 
-    // Global body motion, applied after the mesh is deformed. Everything is in
-    // normalised sprite units, then rotated about the feet.
+    const t = now / 1000
+    const poke = state.reaction === 'poke'
     const lean = (Math.sin(t * 0.8 * preset.speed) * 0.7 * Math.PI) / 180
     const shake = preset.shake ? (Math.sin(t * 26) * 2.6 * preset.shake) / 240 : 0
-    const hop = preset.hop ? (Math.max(0, Math.sin(t * 4.2)) * -7 * preset.hop) / 423 : 0
+    const hop = (preset.hop ? Math.max(0, Math.sin(t * 4.2)) * -7 * preset.hop : 0)
+      + (poke ? Math.max(0, Math.sin(((now - state.moodSince) / REACTION_MS) * Math.PI)) * -0.022 : 0)
     const bob = Math.sin(t * 1.55 * preset.speed) * 0.011 * preset.bob
     const cos = Math.cos(lean)
     const sin = Math.sin(lean)
     const pivotX = 0.5
     const pivotY = 0.94
-    const talkAmount = talking ? 0.35 + 0.65 * (0.5 + 0.5 * Math.sin(t * 15)) : 0
+    const talkAmount = state.talking ? 0.35 + 0.65 * (0.5 + 0.5 * Math.sin(t * 15)) : 0
+
+    // Where the eyes look: the cursor when it is over the pet, else the glance.
+    const look = state.pointer.active ? state.pointer : state.glance
 
     for (let index = 0; index < vertexCount; index++) {
       const u = baseU[index]
@@ -283,23 +436,31 @@ export function createCharacter(canvas, options) {
 
       for (const region of swayRegions) {
         const w = weightAt(u, v, region)
-        if (w !== 0) dx += Math.sin(t * region.freq * TAU + region.phase) * region.amp * w
+        if (w === 0) continue
+        dx += Math.sin(t * region.freq * TAU + region.phase) * region.amp * w
+        // While the window is dragged, the body lags behind the motion.
+        if (state.drag.active) dx -= state.drag.vx * 0.0016 * w * (1 - v)
       }
       for (const region of flapRegions) {
         const w = weightAt(u, v, region)
-        if (w !== 0) dy += Math.sin(t * region.freq * TAU + region.phase) * region.amp * w
+        if (w === 0) continue
+        dy += Math.sin(t * region.freq * TAU + region.phase) * region.amp * w
+        if (state.drag.active) dy -= state.drag.vy * 0.0016 * w
       }
       for (const region of breatheRegions) {
         const w = weightAt(u, v, region)
-        if (w !== 0) dy += Math.sin(t * region.freq * TAU) * region.amp * w
+        if (w === 0) continue
+        dy += Math.sin(t * region.freq * TAU) * region.amp * w
       }
-      // Eyes: squash toward the region centre so the lid actually closes; the
-      // same regions let the eyes follow the cursor.
+      // Eyes: squash toward the region centre so the lid actually closes; a poke
+      // widens them; the same regions let the eyes follow a target.
       for (const region of blinkRegions) {
         const w = weightAt(u, v, region)
         if (w === 0) continue
-        py = region.cy + (py - region.cy) * (1 - w * (1 - blink))
-        if (pointer.active) dx += (pointer.x - 0.5) * region.rx * 0.25 * w
+        const widen = poke ? 0.2 : 0
+        py = region.cy + (py - region.cy) * (1 - w * (1 - state.blink) - w * widen)
+        dx += (look.x - 0.5) * region.rx * 0.3 * w
+        dy += (look.y - 0.5) * region.ry * 0.25 * w
       }
       // Mouth: open while the agent is streaming an answer.
       for (const region of talkRegions) {
@@ -321,29 +482,58 @@ export function createCharacter(canvas, options) {
     gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer)
     gl.bufferSubData(gl.ARRAY_BUFFER, 0, positions)
     gl.drawElements(gl.TRIANGLES, indices.length, gl.UNSIGNED_SHORT, 0)
+
+    // Emblems live on the overlay canvas; clear it only when it can have
+    // content, so the common idle frame costs nothing.
+    if (emblemVisible !== (state.sleeping || state.reaction !== null)) {
+      emblemVisible = state.sleeping || state.reaction !== null
+      ctx2d.clearRect(0, 0, overlay.width, overlay.height)
+    }
+    if (state.sleeping) drawSleep(now)
+    if (state.reaction !== null) drawMark(state.reaction, now - state.moodSince)
   }
 
   raf = requestAnimationFrame(frame)
 
   return {
     setMood(next) {
-      if (next === mood) return
-      mood = next
-      moodSince = performance.now()
-      blink = 1
-      nextBlinkAt = 0.3
+      if (next === state.mood) return
+      state.mood = next
+      state.moodSince = performance.now()
+      state.idleSince = next === 'idle' ? performance.now() : state.idleSince
+      state.sleeping = false
+      state.blink = 1
+      state.nextBlinkAt = 0.3
     },
     setTalking(next) {
-      talking = next === true
+      state.talking = next === true
     },
     /** Pointer position in normalised sprite coordinates, so the eyes follow it. */
     setPointer(x, y, active) {
-      pointer = { x, y, active: active !== false }
+      state.pointer = { x, y, active: active !== false }
+      if (active !== false) state.idleSince = performance.now()
+    },
+    /** A transient mark: 'poke' | 'done' | 'error' | 'wake'. */
+    react(kind) {
+      state.reaction = kind
+      state.moodSince = performance.now()
+      if (kind === 'wake' || kind === 'poke') state.sleeping = false
+    },
+    /** While the window is being dragged, so the body can lag behind it. */
+    setDragging(active, vx = 0, vy = 0) {
+      state.drag = { active: active === true, vx, vy }
+    },
+    setSleepAfter(ms) {
+      if (Number.isFinite(ms) && ms > 0) sleepAfterMs = ms
+    },
+    isSleeping() {
+      return state.sleeping
     },
     dispose() {
       disposed = true
       cancelAnimationFrame(raf)
       image.onload = null
+      if (overlay.parentElement !== null) overlay.parentElement.removeChild(overlay)
       gl.deleteBuffer(positionBuffer)
       gl.deleteBuffer(uvBuffer)
       gl.deleteBuffer(indexBuffer)

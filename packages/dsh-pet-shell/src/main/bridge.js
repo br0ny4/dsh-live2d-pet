@@ -59,6 +59,13 @@ async function request(discovery, path, init = {}, timeoutMs = 4000) {
 
 export const fetchState = (discovery) => request(discovery, '/v1/state')
 
+/** The characters the harness can offer, newest selection included. */
+export const fetchCharacters = (discovery) => request(discovery, '/v1/characters')
+
+/** One character's manifest, rig and sprite (base64 PNG). */
+export const fetchCharacter = (discovery, id) =>
+  request(discovery, `/v1/characters/${encodeURIComponent(id)}`, {}, 8000)
+
 export const sendPrompt = (discovery, args) => request(discovery, '/v1/prompt', {
   method: 'POST',
   headers: { 'content-type': 'application/json' },

@@ -10,7 +10,7 @@
  *   node build.mjs
  */
 import { build } from 'esbuild'
-import { readFile, writeFile, mkdir } from 'node:fs/promises'
+import { readFile, writeFile, mkdir, cp, readdir, rm } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -18,8 +18,8 @@ const ROOT = dirname(fileURLToPath(import.meta.url))
 const PKG = JSON.parse(await readFile(join(ROOT, 'package.json'), 'utf8'))
 const OUT = join(ROOT, 'lib', 'client.js')
 
-const SPRITE = join(ROOT, '..', '..', 'resources', 'character', 'whale-maid', 'character-pet.png')
-const RIG = join(ROOT, '..', '..', 'resources', 'character', 'whale-maid', 'puppet.json')
+const SPRITE = join(ROOT, '..', '..', 'resources', 'characters', 'whale-maid', 'character-pet.png')
+const RIG = join(ROOT, '..', '..', 'resources', 'characters', 'whale-maid', 'puppet.json')
 
 async function dataUrl(path, mime) {
   const bytes = await readFile(path)
@@ -58,3 +58,17 @@ const bundle = `window.__ModuleLoader__.load({
 await mkdir(dirname(OUT), { recursive: true })
 await writeFile(OUT, bundle)
 console.log(`built ${OUT} (${(Buffer.byteLength(bundle) / 1024).toFixed(0)} KB)`)
+
+// The built-in characters live in the repository as the source of truth, and
+// are copied in so a published package carries them. `lib/characters.js`
+// searches this directory before falling back to the repository layout.
+const CHARACTER_SOURCE = join(ROOT, '..', '..', 'resources', 'characters')
+const CHARACTER_DEST = join(ROOT, 'characters')
+await rm(CHARACTER_DEST, { recursive: true, force: true })
+let copied = 0
+for (const entry of await readdir(CHARACTER_SOURCE, { withFileTypes: true })) {
+  if (!entry.isDirectory()) continue
+  await cp(join(CHARACTER_SOURCE, entry.name), join(CHARACTER_DEST, entry.name), { recursive: true })
+  copied += 1
+}
+console.log(`copied ${copied} character(s) -> characters/`)

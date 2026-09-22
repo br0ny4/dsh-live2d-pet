@@ -83,7 +83,7 @@ cd packages/dsh-live2d-pet && npm publish
 
 ## 资产与模型的版本归属
 
-- **角色立绘**（`resources/character/`）：随仓库版本走。`pnpm assets:character` 逐字节可复现，所以它是"可重建的源产物"而非二进制黑盒。
+- **角色立绘**（`resources/characters/`）：随仓库版本走。`pnpm characters:build` 逐字节可复现，所以它是"可重建的源产物"而非二进制黑盒。
 - **Live2D 模型**（`resources/live2d/models/whale-maid/`）：随仓库走，同时记录了生成它的 psd2live 参数（`--atlas 4096 --mesh-spacing 64`）。重做模型＝patch 版本，除非它改变了插件读取的路径或 `model3.json` 契约。
 - **下载的官方样例模型**：不入库，不参与版本管理。
 - 插件内联的立绘（`lib/client.js` 里的 base64）是构建产物，不入库，由 `pnpm build` 生成。

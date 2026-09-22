@@ -13,10 +13,11 @@
     "test:shell": "node packages/dsh-pet-shell/test/smoke.mjs",
     "test:model": "node live2d-pipeline/tools/verify.mjs",
     "sync": "./scripts/sync.sh",
-    "assets:character": "node scripts/build-character.mjs",
-    "assets:character:debug": "node scripts/build-character.mjs --debug",
     "assets:live2d": "node scripts/fetch-live2d-assets.mjs",
-    "assets:live2d:list": "node scripts/fetch-live2d-assets.mjs --list"
+    "assets:live2d:list": "node scripts/fetch-live2d-assets.mjs --list",
+    "characters": "node scripts/character.mjs list",
+    "characters:build": "node scripts/character.mjs build",
+    "characters:rerig": "node scripts/character.mjs build --rerig"
   },
   "devDependencies": {
     "ag-psd": "^31.0.2",
