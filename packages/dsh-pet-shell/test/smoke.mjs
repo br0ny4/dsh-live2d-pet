@@ -91,7 +91,13 @@ check('mock bridge state answers over HTTP', await (async () => {
 })())
 
 // ---- 2. the real shell ----------------------------------------------------
-const shell = spawn(binary, [PACKAGE, '--attach-only', '--screenshot', shot], {
+// Start on the mesh character and switch to the atlas one: that transition is
+// where a reused canvas silently stops rendering (a canvas keeps its context
+// type for life), and it is invisible to a test that only ever loads one.
+const shell = spawn(binary, [
+  PACKAGE, '--attach-only', '--screenshot', shot,
+  '--character', 'whale-maid', '--switch-to', 'gugu',
+], {
   env: { ...process.env, DSH_HOME: home },
   stdio: ['ignore', 'pipe', 'pipe'],
 })
@@ -118,6 +124,12 @@ check('the renderer logged no errors', rendererErrors.length === 0,
   rendererErrors.length ? rendererErrors[0] : 'clean')
 check('renderer reported a live canvas', /canvas info: \{"w":\d+,"h":\d+/.test(shellLog),
   (shellLog.match(/canvas info: .*/) || [''])[0])
+
+// The switch is the regression guard for the canvas-context bug.
+const switched = shellLog.match(/switched=(\S+) ok=(\S+) painted=(\S+) canvas=(\S+)/)
+check('switching character backends still paints',
+  switched !== null && switched[2] === 'true' && switched[3] === 'true' && /^\d+x\d+$/.test(switched[4]),
+  switched === null ? 'no switch log' : `-> ${switched[1]} canvas=${switched[4]}`)
 
 // The character path is what the picker drives: registry -> bridge -> renderer.
 const characterProbe = await (async () => {

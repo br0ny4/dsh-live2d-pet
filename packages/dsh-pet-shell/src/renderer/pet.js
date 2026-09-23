@@ -365,11 +365,27 @@ window.dshPet.onCharacters((characters) => {
   renderCharacterOptions()
 })
 
+/**
+ * Give each character its own canvas element.
+ *
+ * A canvas's context type is permanent: once a WebGL context exists on it,
+ * `getContext('2d')` returns null forever. Reusing one canvas across a mesh
+ * character and an atlas character silently produced nothing at all.
+ */
+function freshCanvas() {
+  const next = document.createElement('canvas')
+  next.id = 'character'
+  el.canvas.replaceWith(next)
+  el.canvas = next
+  return next
+}
+
 window.dshPet.onCharacter((character) => {
   view.current = character
   const apply = () => {
+    const canvas = freshCanvas()
     if (view.character) view.character.dispose()
-    view.character = createCharacter(el.canvas, {
+    view.character = createCharacter(canvas, {
       rig: character.rig,
       sprite: character.sprite,
       blinkSprite: character.blinkSprite,

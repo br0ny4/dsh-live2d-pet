@@ -57,6 +57,18 @@
   角色清单的 `kind: "atlas"` 决定用哪条路；打盹/戳一下/状态徽记对两者同样生效
 - 外壳命中检测对图集角色改用待机第一帧轮廓做蒙版
 
+### 变更
+
+- **修复跨角色后端切换后画面静止**——从鲸鱼娘（网格形变，WebGL）切到咕咕嘎嘎
+  （帧动画，2D）时复用了同一个 `<canvas>`，而 **canvas 的上下文类型是不可变的**：
+  拿到 WebGL 的 canvas 永远返回不了 2D context，于是新后端静默 no-op，
+  看起来就是"没切，也不会动"。修法是**每次换角色都换一个新 canvas**：
+  外壳渲染器用 `freshCanvas()` 替换节点；页内插件在 canvas 元素上用 `key={character.id}`
+  让 React 重建。引擎兜底从静默 no-op 改为显式 `console.error`，未来若出现
+  会立刻在渲染进程报错上暴露
+- 烟测加入跨后端切换回归断言（`--switch-to gugu`），避免这种"单跑一种角色
+  永远发现不了"的隐性 bug 再溜回来
+
 ### 计划中
 
 - 接入 Cubism 渲染后端，让桌宠真正加载 `resources/live2d/models/whale-maid/`

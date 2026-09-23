@@ -6,7 +6,7 @@
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Version](https://img.shields.io/badge/version-0.1.0-informational.svg)](CHANGELOG.md)
-[![Tests](https://img.shields.io/badge/tests-99%20assertions-brightgreen.svg)](#测试)
+[![Tests](https://img.shields.io/badge/tests-100%20assertions-brightgreen.svg)](#测试)
 
 <img src="docs/images/pet-panel.png" alt="桌宠与指令面板" width="268" />
 &nbsp;&nbsp;
@@ -206,7 +206,7 @@ DSH_HOME=/tmp/pet-dev npx electron packages/dsh-pet-shell --attach-only --dev
 ## 测试
 
 ```bash
-pnpm test              # 全部 99 项断言
+pnpm test              # 全部 100 项断言
 pnpm test:bridge       # Host 桥 43 项
 pnpm test:harness      # 真 harness 端到端 11 项（无 dsh 时自动跳过）
 pnpm test:shell        # 外壳端到端 13 项

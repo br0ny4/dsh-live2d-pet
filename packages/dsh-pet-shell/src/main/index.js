@@ -31,6 +31,8 @@ const OPTIONS = {
   attachOnly: ARGS.includes('--attach-only'),
   /** Start on this character instead of the remembered one. */
   character: argValue('character'),
+  /** Dev: switch to this character after the first one has painted. */
+  switchTo: argValue('switch-to'),
 }
 
 /** Dev affordance: render the window to a PNG so the pet can be eyeballed headlessly. */
@@ -378,6 +380,26 @@ app.whenReady().then(async () => {
   if (SHOT !== null) {
     setTimeout(async () => {
       try {
+        if (OPTIONS.switchTo) {
+          // Switching backends reuses the canvas only if the renderer is naive
+          // about context types; this exercises exactly that path.
+          const firstDeadline = Date.now() + 15_000
+          while (!canvasPainted && Date.now() < firstDeadline) {
+            await new Promise((resolve) => setTimeout(resolve, 150))
+          }
+          const result = await applyCharacter(OPTIONS.switchTo)
+          canvasPainted = false
+          const secondDeadline = Date.now() + 20_000
+          while (!canvasPainted && Date.now() < secondDeadline) {
+            await new Promise((resolve) => setTimeout(resolve, 150))
+          }
+          const size = await petWindow.webContents.executeJavaScript(`(() => {
+            const c = document.getElementById('character')
+            return c ? c.width + 'x' + c.height : 'none'
+          })()`)
+          console.log(`[shell] switched=${OPTIONS.switchTo} ok=${result.ok} painted=${canvasPainted} canvas=${size}`)
+        }
+
         if (ARGS.includes('--with-panel')) {
           // Open the bubble the way a click would, and *check* it opened: the
           // synthetic events race the page's own load, so a single dispatch

@@ -149,7 +149,9 @@ export function createCharacter(canvas, options) {
   let emblemVisible = false
 
   if (gl === null) {
-    // No WebGL: still show the character, just without deformation.
+    // No WebGL — or the canvas already owns a 2D context from a previous
+    // character. Either way this backend cannot draw here.
+    console.error('[dsh-live2d-pet] mesh backend needs a fresh WebGL canvas')
     const image = new Image()
     image.onload = () => {
       canvas.width = image.naturalWidth
@@ -645,7 +647,10 @@ function createFrameCharacter(canvas, options) {
 
   const ctx2d = canvas.getContext('2d')
   if (ctx2d === null) {
-    // No 2D context is not a recoverable situation for this backend.
+    // A canvas that already owns a WebGL context can never hand out a 2D one.
+    // This is not recoverable here, so say so loudly: failing silently made a
+    // character switch look like "it did not switch and does not move".
+    console.error('[dsh-live2d-pet] frame backend needs a fresh canvas: this one already has a WebGL context')
     return { setMood() {}, setTalking() {}, setPointer() {}, react() {}, setDragging() {}, setSleepAfter() {}, isSleeping() { return false }, dispose() {} }
   }
 

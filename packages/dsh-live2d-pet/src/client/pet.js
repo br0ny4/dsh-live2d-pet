@@ -483,7 +483,10 @@ export function apply(ctx) {
         onPointerLeave: () => characterRef.current && characterRef.current.setPointer(0.5, 0.5, false),
         title: '单击打开指令气泡，拖动可移动',
       },
-        React.createElement('canvas', { ref: canvasRef, onPointerMove: onCanvasMove }),
+        // `key` gives every character a brand-new canvas: a canvas keeps its
+        // context type for life, so reusing one across a WebGL character and a
+        // 2D frame character renders nothing.
+        React.createElement('canvas', { key: character.id, ref: canvasRef, onPointerMove: onCanvasMove }),
         React.createElement('span', { className: `dshl2d-badge${running ? ' is-running' : ''}` }),
         React.createElement('span', { className: 'dshl2d-hint' }, '点击下达指令'),
       ),
